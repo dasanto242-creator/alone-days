@@ -7,6 +7,8 @@ const SHOTS := [
 	{"pos": Vector3(-6, 0.05, 8), "yaw": -140.0, "pitch": -18.0, "file": "shot_road.png"},
 	{"pos": Vector3(1, 0.15, -14.5), "yaw": 30.0, "pitch": -15.0, "file": "shot_indoor.png"},
 	{"pos": Vector3(-10.3, 0.05, 3.3), "yaw": 0.0, "pitch": -20.0, "file": "shot_loot.png"},
+	{"pos": Vector3(4, 0.05, 14), "yaw": 30.0, "pitch": -10.0, "file": "shot_walk.png", "move": 0.45},
+	{"pos": Vector3(-4, 0.05, 14), "yaw": -60.0, "pitch": -8.0, "file": "shot_run.png", "move": 1.0},
 ]
 
 
@@ -22,7 +24,10 @@ func _ready() -> void:
 		player.global_position = shot.pos
 		player.reset_physics_interpolation()
 		TouchInput.add_look(Vector2(rad_to_deg(rig.get_yaw()) - shot.yaw, rig.get_pitch_degrees() - shot.pitch))
+		if shot.has("move"):
+			Input.action_press("move_left", shot.move)
 		await _wait(90)
+		Input.action_release("move_left")
 		img = get_viewport().get_texture().get_image()
 		img.save_png("res://build/screenshots/" + shot.file)
 		print("salvo ", shot.file)

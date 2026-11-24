@@ -168,11 +168,13 @@ func _run_stage2() -> void:
 	_check("Capacidade base 6 kg (%.1f)" % inv.capacity(), is_equal_approx(inv.capacity(), 6.0))
 
 	# --- Equipar: capacidade aumenta e aparece nas costas
-	var backpack_mesh := _player.get_node("Visual/Body/Hips/Torso/Backpack") as Node3D
+	var backpack_mesh := _player.get_node("Visual/Model").find_child("Backpack", true, false) as Node3D
 	_check("Sem mochila nas costas antes de equipar", not backpack_mesh.visible)
 	_player.equip_item(0)
 	_check("Equipar mochila aumenta capacidade (%.1f kg)" % inv.capacity(), is_equal_approx(inv.capacity(), 22.0))
 	_check("Mochila aparece nas costas", backpack_mesh.visible)
+	var animator := _player.get_node("Visual") as SurvivorAnimator
+	_check("Animação parado = idle (%s)" % animator.current_animation(), animator.current_animation() == &"idle")
 
 	# --- Pegar água e beber
 	await _approach(Vector3(-9.6, 0.0, 6.5))
@@ -224,6 +226,8 @@ func _run_stage2() -> void:
 	Input.action_press("move_forward")
 	await _frames(90)
 	_check("Sprint gasta stamina (%.0f)" % stats.stamina, stats.stamina < 85.0)
+	var anim := (_player.get_node("Visual") as SurvivorAnimator).current_animation()
+	_check("Animação de sprint ao correr rápido (%s)" % anim, anim == &"sprint")
 	stats.stamina = 3.0
 	await _frames(20)
 	Input.action_release("move_forward")
@@ -235,6 +239,22 @@ func _run_stage2() -> void:
 	_check("Exausto não consegue pular", _player.global_position.y - y0 < 0.1)
 	await _frames(150)
 	_check("Stamina recupera descansando (%.0f)" % stats.stamina, stats.stamina > 40.0 and not stats.is_exhausted)
+
+	# --- Animações de agachar e andar
+	var animator2 := _player.get_node("Visual") as SurvivorAnimator
+	await _tap_action("crouch")
+	await _frames(10)
+	_check("Agachado parado = crouch_idle (%s)" % animator2.current_animation(), animator2.current_animation() == &"crouch_idle")
+	Input.action_press("move_forward", 0.5)
+	await _frames(40)
+	_check("Agachado andando = crouch_walk (%s)" % animator2.current_animation(), animator2.current_animation() == &"crouch_walk")
+	Input.action_release("move_forward")
+	await _tap_action("crouch")
+	Input.action_press("move_forward", 0.4)
+	await _frames(40)
+	_check("Joystick leve = walk (%s)" % animator2.current_animation(), animator2.current_animation() == &"walk")
+	Input.action_release("move_forward")
+	await _frames(30)
 
 	# --- Largar item: aparece no chão e pode ser pego de novo
 	inv.add_item(&"soda_can", 2)

@@ -11,7 +11,7 @@
 | 1.3 | Primeiro APK rodando no celular | ✅ Build automático no GitHub (Releases) |
 | 1.4 | Perfis gráficos Baixo/Médio/Alto + limite 30/45/60 FPS (salvos) | ✅ Concluído |
 | 1.5 | Cenário de teste: casa com interior, porta, escada, caixotes, carro, árvores | ✅ Concluído |
-| 1.6 | Personagem 3D + animações | 🟡 Parcial — boneco provisório com animação procedural; modelo definitivo pendente |
+| 1.6 | Personagem 3D + animações | ✅ Sobrevivente realista próprio (Blender, base CC0), 8 animações |
 | 1.7 | Movimento: andar, correr, sprint, agachar, pular, girar | ✅ Concluído (testado) |
 | 1.8 | Câmera TPS: órbita, limites, colisão com parede, ajuste em interiores | ✅ Concluído (testado) |
 | 1.9 | Joystick flutuante + câmera por toque, multitoque | ✅ Concluído (testado) |
@@ -32,16 +32,21 @@
 | 2.7 | Tela de inventário por toque com ações contextuais (Comer, Beber, Usar, Equipar, Largar) | ✅ Concluído (testado) |
 | 2.8 | HUD discreta (vida, fome, sede, stamina), avisos na tela, tela de morte | ✅ Concluído |
 
-**Testes automáticos:** `tools/smoke_test.tscn` — 54 verificações, 54 aprovadas (rodam também no GitHub a cada build).
+**Testes automáticos:** `tools/smoke_test.tscn` — 59 verificações, 59 aprovadas (rodam também no GitHub a cada build).
 
 ## Com problemas / limitações conhecidas
-- Personagem é provisório (formas simples). Será trocado por modelo 3D com licença livre.
+- Rosto ainda sem textura fotográfica (pele procedural); cabelo raspado pintado sob o gorro.
 - Escadas usam rampa invisível de colisão (técnica comum; sobe sem travar). Escalar obstáculos fica para depois.
 - Temperatura, sangramento e doenças ficam para uma etapa seguinte (a estrutura de atributos já comporta).
 - Ainda sem salvamento: fechar o jogo reinicia a partida.
 
+## Personagem 3D
+- Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).
+- ~22 mil triângulos, 67 ossos, texturas próprias comprimidas para celular.
+- Jaqueta e mochila só aparecem quando equipadas.
+- Animações: idle, walk, run, sprint, crouch_idle, crouch_walk, jump, death (velocidade de reprodução acompanha a velocidade real).
+
 ## Próximos passos
-1. Modelo 3D definitivo do sobrevivente com animações (1.6) — via Mixamo.
 2. Sistema de salvamento (inventário e atributos já são serializáveis).
 3. Etapa 3 — Infectados: modelos, animações, IA, perseguição, ataque, dano.
 

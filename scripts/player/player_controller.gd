@@ -45,7 +45,7 @@ var _idle_time := 0.0
 @onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var _capsule: CapsuleShape3D = _collision.shape
 @onready var _visual: Node3D = $Visual
-@onready var _animator: PlaceholderAnimator = $Visual
+@onready var _animator: SurvivorAnimator = $Visual
 @onready var _interaction_area: Area3D = $Visual/InteractionArea
 
 

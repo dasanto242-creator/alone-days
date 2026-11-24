@@ -1,145 +1,41 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_gmlin"]
-[ext_resource type="Script" path="res://scripts/survival/survival_stats.gd" id="2_lvxji"]
-[ext_resource type="Script" path="res://scripts/player/placeholder_animator.gd" id="3_p47bc"]
+[ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_lvxji"]
+[ext_resource type="Script" path="res://scripts/survival/survival_stats.gd" id="2_p47bc"]
+[ext_resource type="Script" path="res://scripts/player/survivor_animator.gd" id="3_75vfm"]
+[ext_resource type="PackedScene" path="res://assets/models/survivor/survivor.glb" id="4_0owmy"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_75vfm"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_qek5x"]
 radius = 0.35
 height = 1.8
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0owmy"]
-albedo_color = Color(0.18, 0.19, 0.19, 1)
-roughness = 0.9
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_qek5x"]
-radius = 0.1
-height = 0.92
-radial_segments = 12
-rings = 4
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_5gtgg"]
-radius = 0.1
-height = 0.92
-radial_segments = 12
-rings = 4
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_h17s1"]
-albedo_color = Color(0.29, 0.33, 0.2, 1)
-roughness = 0.9
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_je7p5"]
-radius = 0.21
-height = 0.68
-radial_segments = 12
-rings = 4
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fm80t"]
-albedo_color = Color(0.62, 0.5, 0.42, 1)
-roughness = 0.9
-
-[sub_resource type="SphereMesh" id="SphereMesh_gx1jg"]
-radius = 0.13
-height = 0.27
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_ugbui"]
-radius = 0.065
-height = 0.62
-radial_segments = 12
-rings = 4
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_fcs02"]
-radius = 0.065
-height = 0.62
-radial_segments = 12
-rings = 4
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_myrg7"]
-albedo_color = Color(0.24, 0.21, 0.16, 1)
-roughness = 0.9
-
-[sub_resource type="BoxMesh" id="BoxMesh_kvlxm"]
-size = Vector3(0.36, 0.46, 0.18)
-
-[sub_resource type="SphereShape3D" id="SphereShape3D_uf5tr"]
+[sub_resource type="SphereShape3D" id="SphereShape3D_5gtgg"]
 radius = 1.1
 
-[node name="Player" type="CharacterBody3D" unique_id=1469550492]
+[node name="Player" type="CharacterBody3D" unique_id=612708231]
 collision_layer = 2
 floor_max_angle = 0.80285144
 floor_snap_length = 0.35
-script = ExtResource("1_gmlin")
+script = ExtResource("1_lvxji")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1716659521]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2018927356]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
-shape = SubResource("CapsuleShape3D_75vfm")
+shape = SubResource("CapsuleShape3D_qek5x")
 
-[node name="Survival" type="Node" parent="." unique_id=689482470]
-script = ExtResource("2_lvxji")
+[node name="Survival" type="Node" parent="." unique_id=678156517]
+script = ExtResource("2_p47bc")
 
-[node name="Visual" type="Node3D" parent="." unique_id=273271520]
-script = ExtResource("3_p47bc")
+[node name="Visual" type="Node3D" parent="." unique_id=2008873067]
+script = ExtResource("3_75vfm")
 
-[node name="Body" type="Node3D" parent="Visual" unique_id=1656813969]
+[node name="Model" parent="Visual" unique_id=1937552047 instance=ExtResource("4_0owmy")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Hips" type="Node3D" parent="Visual/Body" unique_id=327277436]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.95, 0)
-
-[node name="LegL" type="Node3D" parent="Visual/Body/Hips" unique_id=1072872623]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Visual/Body/Hips/LegL" unique_id=681877556]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.46, 0)
-material_override = SubResource("StandardMaterial3D_0owmy")
-mesh = SubResource("CapsuleMesh_qek5x")
-
-[node name="LegR" type="Node3D" parent="Visual/Body/Hips" unique_id=538838932]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Visual/Body/Hips/LegR" unique_id=376719451]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.46, 0)
-material_override = SubResource("StandardMaterial3D_0owmy")
-mesh = SubResource("CapsuleMesh_5gtgg")
-
-[node name="Torso" type="Node3D" parent="Visual/Body/Hips" unique_id=414827885]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
-
-[node name="Chest" type="MeshInstance3D" parent="Visual/Body/Hips/Torso" unique_id=254591311]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
-material_override = SubResource("StandardMaterial3D_h17s1")
-mesh = SubResource("CapsuleMesh_je7p5")
-
-[node name="Head" type="MeshInstance3D" parent="Visual/Body/Hips/Torso" unique_id=1585056010]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
-material_override = SubResource("StandardMaterial3D_fm80t")
-mesh = SubResource("SphereMesh_gx1jg")
-
-[node name="ArmL" type="Node3D" parent="Visual/Body/Hips/Torso" unique_id=1605063351]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.28, 0.56, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Visual/Body/Hips/Torso/ArmL" unique_id=223609111]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.29, 0)
-material_override = SubResource("StandardMaterial3D_h17s1")
-mesh = SubResource("CapsuleMesh_ugbui")
-
-[node name="ArmR" type="Node3D" parent="Visual/Body/Hips/Torso" unique_id=336656527]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.28, 0.56, 0)
-
-[node name="Mesh" type="MeshInstance3D" parent="Visual/Body/Hips/Torso/ArmR" unique_id=1449533579]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.29, 0)
-material_override = SubResource("StandardMaterial3D_h17s1")
-mesh = SubResource("CapsuleMesh_fcs02")
-
-[node name="Backpack" type="MeshInstance3D" parent="Visual/Body/Hips/Torso" unique_id=1418255357]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0.22)
-material_override = SubResource("StandardMaterial3D_myrg7")
-mesh = SubResource("BoxMesh_kvlxm")
-
-[node name="InteractionArea" type="Area3D" parent="Visual" unique_id=797179807]
+[node name="InteractionArea" type="Area3D" parent="Visual" unique_id=2105883564]
 collision_layer = 0
 collision_mask = 4
 monitorable = false
 
-[node name="Shape" type="CollisionShape3D" parent="Visual/InteractionArea" unique_id=1409873867]
+[node name="Shape" type="CollisionShape3D" parent="Visual/InteractionArea" unique_id=1101924810]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -0.7)
-shape = SubResource("SphereShape3D_uf5tr")
+shape = SubResource("SphereShape3D_5gtgg")

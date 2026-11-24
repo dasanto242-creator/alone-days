@@ -9,6 +9,7 @@ const CAMERA_SCENE := "res://scenes/player/camera_rig.tscn"
 const HUD_SCENE := "res://scenes/ui/hud.tscn"
 const SANDBOX_SCENE := "res://scenes/world/test_sandbox.tscn"
 const PICKUP_SCENE := "res://scenes/world/item_pickup.tscn"
+const SURVIVOR_MODEL := "res://assets/models/survivor/survivor.glb"
 const CATALOG_PATH := "res://data/item_catalog.tres"
 
 const LAYER_WORLD := 1
@@ -125,34 +126,12 @@ func _build_player() -> Node:
 
 	_node(Node, "Survival", player, "res://scripts/survival/survival_stats.gd")
 
-	# Boneco provisório (será trocado pelo modelo 3D definitivo)
-	var jacket := Color(0.29, 0.33, 0.2)
-	var pants := Color(0.18, 0.19, 0.19)
-	var skin := Color(0.62, 0.5, 0.42)
-	var gear := Color(0.24, 0.21, 0.16)
-
-	var visual := _node(Node3D, "Visual", player, "res://scripts/player/placeholder_animator.gd")
-	var body := _node(Node3D, "Body", visual)
-	var hips := _node(Node3D, "Hips", body) as Node3D
-	hips.position.y = 0.95
-	for side in [-1.0, 1.0]:
-		var leg := _node(Node3D, "LegL" if side < 0 else "LegR", hips) as Node3D
-		leg.position.x = 0.12 * side
-		_mesh(leg, "Mesh", _capsule(0.1, 0.92), pants, Vector3(0, -0.46, 0))
-	var torso := _node(Node3D, "Torso", hips) as Node3D
-	torso.position.y = 0.04
-	_mesh(torso, "Chest", _capsule(0.21, 0.68), jacket, Vector3(0, 0.3, 0))
-	var head := SphereMesh.new()
-	head.radius = 0.13
-	head.height = 0.27
-	_mesh(torso, "Head", head, skin, Vector3(0, 0.8, 0))
-	for side in [-1.0, 1.0]:
-		var arm := _node(Node3D, "ArmL" if side < 0 else "ArmR", torso) as Node3D
-		arm.position = Vector3(0.28 * side, 0.56, 0)
-		_mesh(arm, "Mesh", _capsule(0.065, 0.62), jacket, Vector3(0, -0.29, 0))
-	var pack := BoxMesh.new()
-	pack.size = Vector3(0.36, 0.46, 0.18)
-	_mesh(torso, "Backpack", pack, gear, Vector3(0, 0.35, 0.22))
+	# Modelo 3D do sobrevivente (gerado no Blender por tools/character/build_survivor.py)
+	var visual := _node(Node3D, "Visual", player, "res://scripts/player/survivor_animator.gd")
+	var model := (load(SURVIVOR_MODEL) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
+	model.name = "Model"
+	model.rotation_degrees.y = 180.0  # o modelo olha para +Z; o jogo usa -Z como frente
+	visual.add_child(model)
 
 	# Área à frente do personagem que detecta portas e objetos interativos
 	var area := _node(Area3D, "InteractionArea", visual) as Area3D

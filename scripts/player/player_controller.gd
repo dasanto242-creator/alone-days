@@ -1,6 +1,6 @@
 class_name PlayerController
 extends CharacterBody3D
-## Movimentação do sobrevivente em terceira pessoa.
+## Movimentação do sobrevivente em terceira pessoa + ações de inventário.
 ## Lê apenas ações do InputMap (teclado ou controles touch) e a direção da câmera.
 
 @export_group("Velocidades (m/s)")
@@ -33,6 +33,7 @@ var is_crouching := false
 var is_sprinting := false
 ## Altura atual do ponto que a câmera segue (suaviza ao agachar).
 var camera_height := 1.55
+var inventory := Inventory.new()
 
 var _camera_rig: CameraRig
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
@@ -40,6 +41,7 @@ var _focused_interactable: Node = null
 var _last_prompt := ""
 var _idle_time := 0.0
 
+@onready var stats: SurvivalStats = $Survival
 @onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var _capsule: CapsuleShape3D = _collision.shape
 @onready var _visual: Node3D = $Visual
@@ -48,7 +50,11 @@ var _idle_time := 0.0
 
 
 func _ready() -> void:
+	add_to_group("player")
 	camera_height = stand_camera_height
+	inventory.changed.connect(func() -> void: _animator.show_equipment(inventory))
+	_animator.show_equipment(inventory)
+	stats.died.connect(_on_died)
 	if not camera_rig_path.is_empty():
 		_camera_rig = get_node(camera_rig_path) as CameraRig
 		_camera_rig.set_target(self)
@@ -68,6 +74,9 @@ func _physics_process(delta: float) -> void:
 	_idle_time = _idle_time + delta if strength < 0.05 else 0.0
 	if is_sprinting and _idle_time > sprint_cancel_delay:
 		_set_sprinting(false)
+	if is_sprinting and not stats.can_sprint():
+		_set_sprinting(false)
+		Events.notify.emit("Sem fôlego")
 
 	var target_velocity := direction * _target_speed(strength)
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
@@ -91,20 +100,37 @@ func _physics_process(delta: float) -> void:
 	camera_height = lerpf(camera_height, target_cam, 1.0 - exp(-8.0 * delta))
 
 	var ground_speed := Vector2(velocity.x, velocity.z).length()
+	stats.tick(delta, _exertion(ground_speed))
 	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta)
 	_update_interaction_focus()
+
+
+func _exertion(ground_speed: float) -> int:
+	if ground_speed < 0.3:
+		return SurvivalStats.Exertion.IDLE
+	if is_sprinting and ground_speed > jog_speed:
+		return SurvivalStats.Exertion.SPRINT
+	if ground_speed > walk_speed + 0.3:
+		return SurvivalStats.Exertion.JOG
+	return SurvivalStats.Exertion.WALK
 
 
 func _handle_actions() -> void:
 	if Input.is_action_just_pressed("crouch"):
 		_set_crouching(not is_crouching)
 	if Input.is_action_just_pressed("sprint"):
-		_set_sprinting(not is_sprinting)
+		if not is_sprinting and not stats.can_sprint():
+			Events.notify.emit("Sem fôlego")
+		else:
+			_set_sprinting(not is_sprinting)
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		if is_crouching:
 			_set_crouching(false)
-		else:
+		elif stats.can_jump():
+			stats.spend_stamina(stats.jump_cost)
 			velocity.y = jump_velocity
+		else:
+			Events.notify.emit("Sem fôlego")
 	if Input.is_action_just_pressed("interact") and _focused_interactable:
 		_focused_interactable.interact(self)
 
@@ -141,6 +167,8 @@ func _set_sprinting(value: bool, emit := true) -> void:
 	if value == is_sprinting:
 		return
 	is_sprinting = value
+	if value:
+		_idle_time = 0.0  # dá tempo de começar a andar depois de tocar em "Correr"
 	if emit:
 		_emit_state()
 
@@ -168,16 +196,87 @@ func _update_interaction_focus() -> void:
 	var candidates: Array = _interaction_area.get_overlapping_bodies()
 	candidates.append_array(_interaction_area.get_overlapping_areas())
 	for candidate in candidates:
-		if not candidate.has_method("interact"):
+		if not candidate.has_method("interact") or candidate.is_queued_for_deletion():
 			continue
 		var d := global_position.distance_squared_to(candidate.global_position)
 		if d < best_distance:
 			best_distance = d
 			best = candidate
-	var prompt := ""
-	if best and best.has_method("get_interaction_prompt"):
-		prompt = best.get_interaction_prompt()
-	if best != _focused_interactable or (best and prompt != _last_prompt):
+	var verb := ""
+	var target_name := ""
+	if best:
+		verb = best.get_interaction_prompt() if best.has_method("get_interaction_prompt") else "Usar"
+		target_name = best.get_interaction_name() if best.has_method("get_interaction_name") else ""
+	var prompt := verb + "|" + target_name
+	if best != _focused_interactable or prompt != _last_prompt:
 		_focused_interactable = best
 		_last_prompt = prompt
-		Events.interaction_target_changed.emit(prompt if best else "")
+		Events.interaction_target_changed.emit(verb, target_name)
+
+
+func _on_died() -> void:
+	_set_sprinting(false)
+	set_physics_process(false)
+	velocity = Vector3.ZERO
+	_animator.play_death()
+	Events.player_died.emit()
+
+
+# ---------------------------------------------------------------- inventário
+
+## Come, bebe ou usa o item da pilha `index`.
+func use_item(index: int) -> bool:
+	if index < 0 or index >= inventory.stacks.size():
+		return false
+	var d := inventory.stacks[index].data()
+	if d == null or not d.is_usable():
+		return false
+	inventory.take_from(index, 1)
+	stats.consume(d)
+	Events.notify.emit("%s: %s" % [d.use_verb, d.display_name])
+	return true
+
+
+func equip_item(index: int) -> bool:
+	var ok := inventory.equip(index)
+	if ok:
+		Events.notify.emit("Equipado")
+	return ok
+
+
+func unequip_item(slot: int) -> bool:
+	if inventory.unequip(slot):
+		return true
+	Events.notify.emit("Sem espaço: esvazie a mochila antes")
+	return false
+
+
+## Solta `quantity` unidades da pilha `index` no chão, à frente do personagem.
+func drop_item(index: int, quantity := 1) -> bool:
+	var taken := inventory.take_from(index, quantity)
+	if taken == null:
+		return false
+	_spawn_dropped(taken)
+	return true
+
+
+func drop_equipped(slot: int) -> bool:
+	var taken := inventory.take_equipment(slot)
+	if taken == null:
+		return false
+	# Se a capacidade cair abaixo do peso carregado, o excesso também cai no chão
+	while inventory.total_weight() > inventory.capacity() + 0.0001 and not inventory.stacks.is_empty():
+		var last := inventory.stacks.size() - 1
+		_spawn_dropped(inventory.take_from(last, inventory.stacks[last].quantity))
+	_spawn_dropped(taken)
+	return true
+
+
+func _spawn_dropped(stack: ItemStack) -> void:
+	var forward := -_visual.global_basis.z
+	var offset := Vector3(randf_range(-0.25, 0.25), 0.0, randf_range(-0.25, 0.25))
+	var at := global_position + forward * 0.9 + offset + Vector3.UP * 0.02
+	ItemPickup.spawn(get_parent(), stack.item_id, stack.quantity, stack.durability, at)
+	var d := stack.data()
+	if d:
+		Events.notify.emit("Largou %s" % d.display_name)

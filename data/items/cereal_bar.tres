@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/cereal_bar.svg" id="1_32s02"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="2_j2ngf"]
+
+[resource]
+script = ExtResource("2_j2ngf")
+id = &"cereal_bar"
+display_name = "Barra de cereal"
+description = "Leve e prática. Mata a fome por pouco tempo."
+icon = ExtResource("1_32s02")
+category = 0
+max_stack = 6
+use_verb = "Comer"
+restore_food = 18.0
+world_size = Vector3(0.14, 0.03, 0.05)
+world_color = Color(0.72, 0.6, 0.35, 1)

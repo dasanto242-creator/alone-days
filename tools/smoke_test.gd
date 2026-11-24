@@ -148,6 +148,183 @@ func _run() -> void:
 	GameSettings.cycle_fps_limit()
 	_check("Troca de qualidade e FPS sem erros (%s, %d)" % [GameSettings.QUALITY_NAMES[GameSettings.quality], GameSettings.fps_limit], true)
 
+	await _run_stage2()
+
+
+# ================================================================ ETAPA 2
+
+func _run_stage2() -> void:
+	print("\n-- Etapa 2: sobrevivência e inventário --")
+	var inv := _player.inventory
+	var stats := _player.stats
+	var interact_btn := _hud.get_node("%InteractButton") as ActionButton
+
+	# --- Pegar a mochila perto do carro
+	await _approach(Vector3(-10.3, 0.0, 2.4))
+	_check("Botão mostra 'Pegar' perto da mochila", interact_btn.visible and interact_btn.label == "Pegar")
+	await _tap_action("interact")
+	await _frames(3)
+	_check("Mochila foi para o inventário", inv.count_of(&"backpack") == 1)
+	_check("Capacidade base 6 kg (%.1f)" % inv.capacity(), is_equal_approx(inv.capacity(), 6.0))
+
+	# --- Equipar: capacidade aumenta e aparece nas costas
+	var backpack_mesh := _player.get_node("Visual/Body/Hips/Torso/Backpack") as Node3D
+	_check("Sem mochila nas costas antes de equipar", not backpack_mesh.visible)
+	_player.equip_item(0)
+	_check("Equipar mochila aumenta capacidade (%.1f kg)" % inv.capacity(), is_equal_approx(inv.capacity(), 22.0))
+	_check("Mochila aparece nas costas", backpack_mesh.visible)
+
+	# --- Pegar água e beber
+	await _approach(Vector3(-9.6, 0.0, 6.5))
+	await _tap_action("interact")
+	await _frames(3)
+	_check("Pegou garrafa de água", inv.count_of(&"water_bottle") == 1)
+	stats.water = 30.0
+	var idx := _index_of(&"water_bottle")
+	_player.use_item(idx)
+	_check("Beber água: sede 30 → %.0f" % stats.water, is_equal_approx(stats.water, 70.0))
+	_check("Garrafa consumida", inv.count_of(&"water_bottle") == 0)
+
+	# --- Fome e sede caem mais rápido correndo
+	stats.food = 100.0
+	stats.water = 100.0
+	stats.tick(60.0, SurvivalStats.Exertion.IDLE)
+	var food_idle := 100.0 - stats.food
+	stats.food = 100.0
+	stats.tick(60.0, SurvivalStats.Exertion.SPRINT)
+	var food_sprint := 100.0 - stats.food
+	_check("Fome cai com o tempo (%.2f/min parado)" % food_idle, food_idle > 1.0)
+	_check("Correndo gasta o dobro (%.2f/min)" % food_sprint, is_equal_approx(food_sprint, food_idle * 2.0))
+
+	# --- Sem comida e água: perde vida. Bem alimentado: recupera
+	stats.food = 0.0
+	stats.water = 0.0
+	stats.health = 100.0
+	stats.tick(10.0, SurvivalStats.Exertion.IDLE)
+	_check("Fome e sede zeradas tiram vida (%.1f)" % stats.health, stats.health < 95.0)
+	stats.food = 40.0
+	stats.water = 100.0
+	var before := stats.health
+	stats.tick(10.0, SurvivalStats.Exertion.IDLE)
+	_check("Mal alimentado não recupera vida (%.1f → %.1f)" % [before, stats.health], stats.health <= before)
+	stats.food = 100.0
+	stats.water = 100.0
+	stats.tick(10.0, SurvivalStats.Exertion.IDLE)
+	_check("Bem alimentado recupera vida (%.1f → %.1f)" % [before, stats.health], stats.health > before)
+	stats.food = 20.0
+	_check("Com fome a stamina recupera mais devagar", stats.stamina_regen_factor() < 1.0)
+	stats.food = 100.0
+	stats.health = 100.0
+
+	# --- Stamina: sprint gasta, esgotar desliga o sprint e bloqueia o pulo
+	stats.stamina = 100.0
+	_teleport(Vector3(0, 0.05, 20), 0.0)
+	await _frames(5)
+	await _tap_action("sprint")
+	Input.action_press("move_forward")
+	await _frames(90)
+	_check("Sprint gasta stamina (%.0f)" % stats.stamina, stats.stamina < 85.0)
+	stats.stamina = 3.0
+	await _frames(20)
+	Input.action_release("move_forward")
+	_check("Stamina esgotada desliga o sprint", not _player.is_sprinting and stats.is_exhausted)
+	await _frames(30)
+	var y0 := _player.global_position.y
+	await _tap_action("jump")
+	await _frames(10)
+	_check("Exausto não consegue pular", _player.global_position.y - y0 < 0.1)
+	await _frames(150)
+	_check("Stamina recupera descansando (%.0f)" % stats.stamina, stats.stamina > 40.0 and not stats.is_exhausted)
+
+	# --- Largar item: aparece no chão e pode ser pego de novo
+	inv.add_item(&"soda_can", 2)
+	var count_before := _count_pickups()
+	_player.drop_item(_index_of(&"soda_can"), 1)
+	await _frames(3)
+	_check("Largar cria item no chão (%d → %d)" % [count_before, _count_pickups()], _count_pickups() == count_before + 1)
+	_check("Sobrou 1 refrigerante", inv.count_of(&"soda_can") == 1)
+
+	# --- Limite de peso
+	var added := inv.add_item(&"can_beans", 200)
+	_check("Limite de peso respeitado (+%d latas, %.1f/%.1f kg)" % [added, inv.total_weight(), inv.capacity()],
+		added < 200 and inv.total_weight() <= inv.capacity() + 0.001)
+	_check("Não dá para tirar a mochila cheia", not _player.unequip_item(ItemData.Slot.BACK))
+	while inv.count_of(&"can_beans") > 2:
+		inv.take_from(_index_of(&"can_beans"), 4)
+
+	# --- Empilhamento
+	var stacks_before := inv.stacks.size()
+	inv.add_item(&"bandage", 3)
+	inv.add_item(&"bandage", 2)
+	_check("Itens iguais empilham (1 pilha de 5 bandagens)", inv.stacks.size() == stacks_before + 1 and inv.count_of(&"bandage") == 5)
+
+	# --- Salvar e carregar estado (preparação para o sistema de save)
+	var snapshot := inv.to_dict()
+	var copy := Inventory.new()
+	copy.load_dict(snapshot)
+	_check("Inventário serializa e restaura", copy.to_dict() == snapshot and is_equal_approx(copy.capacity(), inv.capacity()))
+
+	# --- Interface: abrir pelo botão, controles somem, usar item pela tela
+	var inv_btn := _hud.get_node("%InventoryButton") as Button
+	var controls := _hud.get_node("MobileControls") as MobileControls
+	_touch(5, inv_btn.get_global_rect().get_center(), true)
+	_click(inv_btn.get_global_rect().get_center())
+	await _frames(3)
+	_touch(5, Vector2.ZERO, false)
+	var screen := _hud.get_node("%InventoryScreen") as InventoryScreen
+	_check("Toque no botão Mochila abre o inventário", screen.visible)
+	_check("Controles de jogo ficam ocultos", not controls.visible)
+	var rig_yaw := _rig.get_yaw()
+	_check("Toque no botão não girou a câmera", is_equal_approx(rig_yaw, _rig.get_yaw()))
+	stats.health = 50.0
+	var band_index := _index_of(&"bandage")
+	var slot_btn := screen.find_child("Slot%d" % band_index, true, false) as Button
+	slot_btn.pressed.emit()
+	var primary := screen.find_child("PrimaryButton", true, false) as Button
+	_check("Ação contextual mostra 'Usar' para bandagem", primary.visible and primary.text == "Usar")
+	primary.pressed.emit()
+	_check("Usar bandagem pela tela cura (%.0f)" % stats.health, is_equal_approx(stats.health, 65.0))
+	(screen.find_child("CloseButton", true, false) as Button).pressed.emit()
+	await _frames(2)
+	_check("Fechar volta aos controles", not screen.visible and controls.visible)
+
+	# --- Morte
+	stats.apply_damage(500.0)
+	await get_tree().create_timer(1.5).timeout
+	var death := _hud.get_node("DeathScreen") as Control
+	_check("Vida zerada mostra a tela de morte", stats.is_dead and death.visible)
+
+
+func _approach(item_pos: Vector3) -> void:
+	_teleport(item_pos + Vector3(0, 0.05, 0.7), 0.0)
+	(_player.get_node("Visual") as Node3D).rotation.y = 0.0
+	await _frames(6)
+
+
+func _index_of(id: StringName) -> int:
+	for i in _player.inventory.stacks.size():
+		if _player.inventory.stacks[i].item_id == id:
+			return i
+	return -1
+
+
+func _count_pickups() -> int:
+	var n := 0
+	for node in _player.get_parent().find_children("*", "Area3D", true, false):
+		if node is ItemPickup and not node.is_queued_for_deletion():
+			n += 1
+	return n
+
+
+func _click(pos: Vector2) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.position = pos
+		ev.global_position = pos
+		ev.pressed = pressed
+		_send(ev)
+
 
 func _teleport(pos: Vector3, _yaw: float) -> void:
 	_player.global_position = pos

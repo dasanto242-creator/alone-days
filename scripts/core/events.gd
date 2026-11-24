@@ -3,11 +3,21 @@ extends Node
 ## Sistemas emitem aqui; HUD e outros sistemas escutam. Assim o personagem
 ## nunca precisa conhecer a interface, e vice-versa.
 
-## Texto da ação disponível (ex.: "Abrir"). String vazia = nada para interagir.
-signal interaction_target_changed(prompt: String)
+## Ação disponível (verbo, ex.: "Pegar") e o nome do alvo (ex.: "Garrafa de água").
+## Verbo vazio = nada para interagir.
+signal interaction_target_changed(verb: String, target_name: String)
 
 ## Estado de movimento do jogador, usado pelos botões para mostrar se estão ativos.
 signal player_movement_state_changed(is_crouching: bool, is_sprinting: bool)
 
 ## Perfil gráfico alterado (GameSettings.Quality).
 signal quality_changed(level: int)
+
+## Mensagem curta na tela (ex.: "+ Garrafa de água").
+signal notify(text: String)
+
+## Uma tela cheia (inventário, morte) abriu ou fechou: controles de jogo ficam desativados.
+signal modal_changed(is_open: bool)
+
+## O jogador morreu.
+signal player_died

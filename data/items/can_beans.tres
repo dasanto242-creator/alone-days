@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/can_beans.svg" id="1_yov7t"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="2_eo0n2"]
+
+[resource]
+script = ExtResource("2_eo0n2")
+id = &"can_beans"
+display_name = "Lata de feijão"
+description = "Comida enlatada. Ainda está dentro da validade, ou quase."
+icon = ExtResource("1_yov7t")
+category = 0
+weight = 0.45
+max_stack = 4
+use_verb = "Comer"
+restore_food = 35.0
+restore_water = 5.0
+world_shape = 1
+world_size = Vector3(0.09, 0.12, 0.09)
+world_color = Color(0.6, 0.45, 0.3, 1)

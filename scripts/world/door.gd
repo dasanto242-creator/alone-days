@@ -15,6 +15,10 @@ func get_interaction_prompt() -> String:
 	return "Fechar" if is_open else "Abrir"
 
 
+func get_interaction_name() -> String:
+	return "Porta"
+
+
 func interact(actor: Node) -> void:
 	is_open = not is_open
 	var hinge := get_parent() as Node3D

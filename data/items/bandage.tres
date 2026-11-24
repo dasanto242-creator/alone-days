@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/bandage.svg" id="1_wgyej"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="2_iirta"]
+
+[resource]
+script = ExtResource("2_iirta")
+id = &"bandage"
+display_name = "Bandagem"
+description = "Faixa limpa para ferimentos."
+icon = ExtResource("1_wgyej")
+category = 2
+weight = 0.05
+max_stack = 6
+use_verb = "Usar"
+restore_health = 15.0
+world_size = Vector3(0.1, 0.05, 0.1)
+world_color = Color(0.85, 0.85, 0.8, 1)

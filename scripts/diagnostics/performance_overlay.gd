@@ -16,9 +16,11 @@ var _worst_frame_ms := 0.0
 
 
 func _ready() -> void:
+	add_to_group("touch_blocker")
 	_quality_button.pressed.connect(GameSettings.cycle_quality)
 	_fps_button.pressed.connect(GameSettings.cycle_fps_limit)
 	Events.quality_changed.connect(func(_level: int) -> void: _refresh_buttons())
+	Events.modal_changed.connect(func(open: bool) -> void: visible = not open)
 	_refresh_buttons()
 
 

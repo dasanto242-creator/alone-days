@@ -8,6 +8,8 @@ const PLAYER_SCENE := "res://scenes/player/player.tscn"
 const CAMERA_SCENE := "res://scenes/player/camera_rig.tscn"
 const HUD_SCENE := "res://scenes/ui/hud.tscn"
 const SANDBOX_SCENE := "res://scenes/world/test_sandbox.tscn"
+const PICKUP_SCENE := "res://scenes/world/item_pickup.tscn"
+const CATALOG_PATH := "res://data/item_catalog.tres"
 
 const LAYER_WORLD := 1
 const LAYER_PLAYER := 2
@@ -19,6 +21,8 @@ var _materials := {}
 
 func _ready() -> void:
 	var ok := true
+	ok = _build_items() and ok
+	ok = _save(_build_pickup(), PICKUP_SCENE) and ok
 	ok = _save(_build_player(), PLAYER_SCENE) and ok
 	ok = _save(_build_camera_rig(), CAMERA_SCENE) and ok
 	ok = _save(_build_hud(), HUD_SCENE) and ok
@@ -119,6 +123,8 @@ func _build_player() -> Node:
 	col.shape = capsule
 	col.position.y = 0.9
 
+	_node(Node, "Survival", player, "res://scripts/survival/survival_stats.gd")
+
 	# Boneco provisório (será trocado pelo modelo 3D definitivo)
 	var jacket := Color(0.29, 0.33, 0.2)
 	var pants := Color(0.18, 0.19, 0.19)
@@ -204,6 +210,32 @@ func _build_hud() -> Node:
 	_button(safe, "SprintButton", "sprint", "Correr", 40.0, Vector2(-98, -222))
 	_button(safe, "InteractButton", "interact", "", 46.0, Vector2(-236, -206))
 
+	# Indicadores de sobrevivência (canto superior direito)
+	var stats_hud := _node(Control, "SurvivalHud", safe, "res://scripts/ui/survival_hud.gd") as Control
+	stats_hud.anchor_left = 1.0
+	stats_hud.anchor_right = 1.0
+	stats_hud.offset_left = -140
+	stats_hud.offset_right = -18
+	stats_hud.offset_top = 16
+	stats_hud.offset_bottom = 112
+
+	var inv_btn := _node(Button, "InventoryButton", safe, "res://scripts/ui/inventory_button.gd") as Button
+	inv_btn.unique_name_in_owner = true
+	inv_btn.anchor_left = 1.0
+	inv_btn.anchor_right = 1.0
+	inv_btn.offset_left = -226
+	inv_btn.offset_right = -158
+	inv_btn.offset_top = 18
+	inv_btn.offset_bottom = 86
+
+	var notes := _node(VBoxContainer, "Notifications", hud, "res://scripts/ui/notifications.gd") as VBoxContainer
+	notes.anchor_left = 0.5
+	notes.anchor_right = 0.5
+	notes.offset_left = -260
+	notes.offset_right = 260
+	notes.offset_top = 70
+	notes.offset_bottom = 200
+
 	var overlay := _node(PanelContainer, "PerformanceOverlay", hud, "res://scripts/diagnostics/performance_overlay.gd") as PanelContainer
 	overlay.position = Vector2(14, 12)
 	overlay.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -226,6 +258,13 @@ func _build_hud() -> Node:
 		b.custom_minimum_size = Vector2(132, 36)
 		b.focus_mode = Control.FOCUS_NONE
 		b.add_theme_font_size_override("font_size", 13)
+
+	var inv_screen := _node(Control, "InventoryScreen", hud, "res://scripts/ui/inventory_screen.gd") as Control
+	inv_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	inv_screen.unique_name_in_owner = true
+	inv_btn.set("inventory_screen_path", NodePath("../../../InventoryScreen"))
+	var death := _node(Control, "DeathScreen", hud, "res://scripts/ui/death_screen.gd") as Control
+	death.set_anchors_preset(Control.PRESET_FULL_RECT)
 	return hud
 
 
@@ -282,6 +321,7 @@ func _build_sandbox() -> Node:
 	_build_stairs(root, Vector3(12, 0, -4))
 	_build_props(root)
 	_build_trees(root)
+	_build_loot(root)
 
 	var player := (load(PLAYER_SCENE) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
 	root.add_child(player)
@@ -452,3 +492,93 @@ func _build_trees(root: Node) -> void:
 		_mesh(tree, "Trunk", trunk_mesh, Color(0.25, 0.2, 0.15), Vector3(0, 2.0, 0))
 		_mesh(tree, "Crown", crown_mesh, Color(0.15, 0.21, 0.13), Vector3(0, 5.2, 0))
 		placed += 1
+
+
+# ---------------------------------------------------------------- itens
+
+func _item(id: String, display_name: String, desc: String, category: int, weight: float,
+		max_stack: int, shape: int, size: Vector3, color: Color, extra := {}) -> ItemData:
+	var d := ItemData.new()
+	d.id = StringName(id)
+	d.display_name = display_name
+	d.description = desc
+	d.category = category
+	d.weight = weight
+	d.max_stack = max_stack
+	d.world_shape = shape
+	d.world_size = size
+	d.world_color = color
+	var icon_path := "res://assets/icons/items/%s.svg" % id
+	if ResourceLoader.exists(icon_path):
+		d.icon = load(icon_path)
+	for key in extra:
+		d.set(key, extra[key])
+	return d
+
+
+func _build_items() -> bool:
+	var C := ItemData.Category
+	var W := ItemData.WorldShape
+	var items: Array[ItemData] = [
+		_item("can_beans", "Lata de feijão", "Comida enlatada. Ainda está dentro da validade, ou quase.",
+			C.FOOD, 0.45, 4, W.CYLINDER, Vector3(0.09, 0.12, 0.09), Color(0.6, 0.45, 0.3),
+			{"use_verb": "Comer", "restore_food": 35.0, "restore_water": 5.0}),
+		_item("cereal_bar", "Barra de cereal", "Leve e prática. Mata a fome por pouco tempo.",
+			C.FOOD, 0.1, 6, W.BOX, Vector3(0.14, 0.03, 0.05), Color(0.72, 0.6, 0.35),
+			{"use_verb": "Comer", "restore_food": 18.0}),
+		_item("water_bottle", "Garrafa de água", "Água potável lacrada.",
+			C.DRINK, 0.6, 3, W.CYLINDER, Vector3(0.08, 0.26, 0.08), Color(0.45, 0.62, 0.75),
+			{"use_verb": "Beber", "restore_water": 40.0}),
+		_item("soda_can", "Refrigerante", "Quente e sem gás, mas hidrata e dá um pouco de energia.",
+			C.DRINK, 0.4, 4, W.CYLINDER, Vector3(0.07, 0.12, 0.07), Color(0.7, 0.2, 0.18),
+			{"use_verb": "Beber", "restore_water": 25.0, "restore_food": 5.0, "restore_stamina": 20.0}),
+		_item("bandage", "Bandagem", "Faixa limpa para ferimentos.",
+			C.MEDICAL, 0.05, 6, W.BOX, Vector3(0.1, 0.05, 0.1), Color(0.85, 0.85, 0.8),
+			{"use_verb": "Usar", "restore_health": 15.0}),
+		_item("backpack", "Mochila de lona", "Mochila resistente. Aumenta muito o que você consegue carregar.",
+			C.BACKPACK, 1.2, 1, W.BAG, Vector3(0.36, 0.46, 0.2), Color(0.3, 0.27, 0.2),
+			{"equip_slot": ItemData.Slot.BACK, "capacity_bonus": 16.0, "max_durability": 100.0}),
+		_item("jacket", "Jaqueta de campo", "Jaqueta verde militar com bolsos. Aquece e carrega um pouco mais.",
+			C.CLOTHING, 1.5, 1, W.BOX, Vector3(0.45, 0.08, 0.35), Color(0.29, 0.33, 0.2),
+			{"equip_slot": ItemData.Slot.BODY, "capacity_bonus": 4.0, "max_durability": 100.0}),
+	]
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://data/items"))
+	var catalog := ItemCatalog.new()
+	for d in items:
+		var path := "res://data/items/%s.tres" % d.id
+		if ResourceSaver.save(d, path) != OK:
+			push_error("Falha ao salvar " + path)
+			return false
+		catalog.items.append(load(path))
+	return ResourceSaver.save(catalog, CATALOG_PATH) == OK
+
+
+func _build_pickup() -> Node:
+	return _node(Area3D, "ItemPickup", null, "res://scripts/world/item_pickup.gd")
+
+
+func _pickup(parent: Node, id: String, pos: Vector3, qty := 1) -> void:
+	var p := (load(PICKUP_SCENE) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
+	p.name = "%s_%d" % [id, parent.get_child_count()]
+	parent.add_child(p)
+	p.position = pos
+	p.set("item_id", StringName(id))
+	p.set("quantity", qty)
+
+
+func _build_loot(root: Node) -> void:
+	var loot := _node(Node3D, "Loot", root)
+	# Dentro da casa
+	_pickup(loot, "water_bottle", Vector3(1.5, 0.85, -15.6))
+	_pickup(loot, "can_beans", Vector3(2.1, 0.85, -15.5), 2)
+	_pickup(loot, "bandage", Vector3(-3.0, 0.1, -12.6), 2)
+	_pickup(loot, "jacket", Vector3(-1.6, 0.1, -16.0))
+	# Perto do carro abandonado
+	_pickup(loot, "backpack", Vector3(-10.3, 0.0, 2.4))
+	_pickup(loot, "water_bottle", Vector3(-9.6, 0.0, 6.5))
+	# Caixotes e plataforma
+	_pickup(loot, "cereal_bar", Vector3(5.0, 1.0, 3.0), 3)
+	_pickup(loot, "soda_can", Vector3(12.5, 1.5, -4.5))
+	_pickup(loot, "can_beans", Vector3(11.3, 1.5, -5.2))
+	# Na estrada
+	_pickup(loot, "soda_can", Vector3(-12.6, 0.02, -8.0))

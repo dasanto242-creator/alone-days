@@ -16,6 +16,7 @@ func _init() -> void:
 	# Autoloads (ordem importa: Events primeiro)
 	s.set_setting("autoload/Events", "*res://scripts/core/events.gd")
 	s.set_setting("autoload/GameSettings", "*res://scripts/core/game_settings.gd")
+	s.set_setting("autoload/Items", "*res://scripts/core/items.gd")
 	s.set_setting("autoload/TouchInput", "*res://scripts/input/touch_input.gd")
 
 	# Tela: base 1280x720, paisagem com sensor, escala para qualquer proporção
@@ -56,6 +57,7 @@ func _init() -> void:
 	_action("jump", [KEY_SPACE])
 	_action("crouch", [KEY_C])
 	_action("interact", [KEY_E])
+	_action("inventory", [KEY_TAB, KEY_I])
 
 	var err := s.save()
 	print("configure_project: ", "OK" if err == OK else "ERRO %d" % err)

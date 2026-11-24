@@ -10,9 +10,13 @@ Jogo de sobrevivência em mundo aberto para Android, em terceira pessoa, feito n
 Controles no PC (o mouse imita o dedo):
 - **Arrastar no lado esquerdo** da tela: joystick · **arrastar no lado direito**: câmera
 - Clicar nos botões redondos: Pular, Agachar, Correr, Interagir
-- Teclado: **W A S D** mover · **Shift** correr rápido · **C** agachar · **Espaço** pular · **E** interagir
+- Teclado: **W A S D** mover · **Shift** correr rápido · **C** agachar · **Espaço** pular · **E** interagir · **Tab/I** inventário
 
-## Gerar o APK para o celular
+## APK automático (GitHub)
+Cada envio para o GitHub roda os testes e gera o APK sozinho:
+https://github.com/dasanto242-creator/alone-days/releases/download/latest-apk/AloneDays.apk
+
+## Gerar o APK no próprio PC (opcional)
 Só precisa fazer a preparação uma vez:
 1. Instale o **Android Studio** (developer.android.com/studio) e abra-o uma vez para baixar o Android SDK.
 2. No Godot: **Editor → Configurações do Editor → Exportar → Android**: aponte "Android SDK Path" para a pasta do SDK
@@ -28,7 +32,12 @@ Atalho: com o celular ligado no cabo USB e a **Depuração USB** ativada, aparec
 - `scripts/core/` — autoloads globais: **Events** (barramento de sinais), **GameSettings** (qualidade, FPS, sensibilidade, vibração).
 - `scripts/input/` — controles touch. Joystick e botões acionam as **mesmas ações** do teclado (InputMap), então o personagem não sabe de onde vem a entrada. **TouchInput** acumula a rotação da câmera.
 - `scripts/player/` — **PlayerController** (movimento), **CameraRig** (câmera TPS com SpringArm3D, colisão e modo interior), **PlaceholderAnimator** (animação provisória).
-- `scripts/world/` — objetos do mundo. Objetos interativos implementam `get_interaction_prompt()` e `interact(actor)`.
+- `scripts/survival/` — **SurvivalStats**: vida, fome, sede, stamina e como se afetam.
+- `scripts/items/` — **ItemData** (definição, em `data/items/*.tres`), **Inventory** e **ItemStack** (classes puras, serializáveis).
+- `scripts/ui/` — HUD de sobrevivência, inventário, avisos e tela de morte.
+- `scripts/world/` — objetos do mundo. Objetos interativos implementam `get_interaction_prompt()`, `get_interaction_name()` e `interact(actor)`.
+
+Para criar um item novo: duplique um arquivo em `data/items/`, mude os valores e adicione-o em `data/item_catalog.tres`.
 - `scenes/` — cenas do jogo. `tools/` — ferramentas de desenvolvimento (não vão para o APK).
 
 Camadas de física: 1 world · 2 player · 3 interactable · 4 trigger.

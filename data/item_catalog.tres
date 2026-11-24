@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemCatalog" format=3]
+
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="1_bkwa7"]
+[ext_resource type="Resource" path="res://data/items/can_beans.tres" id="2_r17ad"]
+[ext_resource type="Resource" path="res://data/items/cereal_bar.tres" id="3_6tph3"]
+[ext_resource type="Resource" path="res://data/items/water_bottle.tres" id="4_pmq3d"]
+[ext_resource type="Resource" path="res://data/items/soda_can.tres" id="5_ttyvi"]
+[ext_resource type="Resource" path="res://data/items/bandage.tres" id="6_lvo0k"]
+[ext_resource type="Resource" path="res://data/items/backpack.tres" id="7_va3tm"]
+[ext_resource type="Resource" path="res://data/items/jacket.tres" id="8_f0gi7"]
+[ext_resource type="Script" path="res://scripts/items/item_catalog.gd" id="9_i8i6x"]
+
+[resource]
+script = ExtResource("9_i8i6x")
+items = Array[ExtResource("1_bkwa7")]([ExtResource("2_r17ad"), ExtResource("3_6tph3"), ExtResource("4_pmq3d"), ExtResource("5_ttyvi"), ExtResource("6_lvo0k"), ExtResource("7_va3tm"), ExtResource("8_f0gi7")])

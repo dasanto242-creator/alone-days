@@ -18,6 +18,8 @@ var _buttons: Array[ActionButton] = []
 var _button_fingers := {}  # índice do dedo -> ActionButton
 var _joystick_finger := -1
 var _look_finger := -1
+var _enabled := true
+var _target_label: Label
 
 @onready var _safe_area: Control = %SafeArea
 @onready var _joystick: TouchJoystick = %Joystick
@@ -31,13 +33,44 @@ func _ready() -> void:
 	for node in find_children("*", "ActionButton", true, false):
 		_buttons.append(node as ActionButton)
 	_interact_button.visible = false
+	_target_label = Label.new()
+	_target_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_target_label.size = Vector2(240, 24)
+	_target_label.position = Vector2(_interact_button.radius - 120.0, -30.0)
+	_target_label.add_theme_font_size_override("font_size", 16)
+	_target_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	_target_label.add_theme_constant_override("shadow_offset_x", 1)
+	_target_label.add_theme_constant_override("shadow_offset_y", 1)
+	_interact_button.add_child(_target_label)
 	Events.interaction_target_changed.connect(_on_interaction_target_changed)
+	Events.modal_changed.connect(func(open: bool) -> void: set_enabled(not open))
 	Events.player_movement_state_changed.connect(_on_player_movement_state_changed)
 	get_viewport().size_changed.connect(_apply_safe_area)
 	_apply_safe_area()
 
 
+## Desliga os controles (ex.: inventário aberto) e solta tudo que estava pressionado.
+func set_enabled(value: bool) -> void:
+	_enabled = value
+	visible = value
+	if not value:
+		release_all()
+
+
+func release_all() -> void:
+	if _joystick_finger != -1:
+		_joystick.end()
+		_push_move(Vector2.ZERO)
+	_joystick_finger = -1
+	_look_finger = -1
+	for finger in _button_fingers:
+		(_button_fingers[finger] as ActionButton).release()
+	_button_fingers.clear()
+
+
 func _input(event: InputEvent) -> void:
+	if not _enabled:
+		return
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
@@ -51,6 +84,10 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_touch_down(finger: int, pos: Vector2) -> bool:
+	# Toques em botões de interface (inventário, painel) ficam com a interface
+	for blocker in get_tree().get_nodes_in_group("touch_blocker"):
+		if blocker is Control and blocker.is_visible_in_tree() and blocker.get_global_rect().has_point(pos):
+			return false
 	for button in _buttons:
 		if button.is_visible_in_tree() and button.contains_point(pos):
 			_button_fingers[finger] = button
@@ -106,10 +143,11 @@ func _set_action(action: StringName, strength: float) -> void:
 		Input.action_release(action)
 
 
-func _on_interaction_target_changed(prompt: String) -> void:
-	_interact_button.visible = not prompt.is_empty()
-	_interact_button.label = prompt
-	if prompt.is_empty():
+func _on_interaction_target_changed(verb: String, target_name: String) -> void:
+	_interact_button.visible = not verb.is_empty()
+	_interact_button.label = verb
+	_target_label.text = target_name
+	if verb.is_empty():
 		for finger in _button_fingers.keys():
 			if _button_fingers[finger] == _interact_button:
 				_interact_button.release()

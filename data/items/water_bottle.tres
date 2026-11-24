@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/water_bottle.svg" id="1_o8yyb"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="2_8odmt"]
+
+[resource]
+script = ExtResource("2_8odmt")
+id = &"water_bottle"
+display_name = "Garrafa de água"
+description = "Água potável lacrada."
+icon = ExtResource("1_o8yyb")
+category = 1
+weight = 0.6
+max_stack = 3
+use_verb = "Beber"
+restore_water = 40.0
+world_shape = 1
+world_size = Vector3(0.08, 0.26, 0.08)
+world_color = Color(0.45, 0.62, 0.75, 1)

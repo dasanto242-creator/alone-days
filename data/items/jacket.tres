@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/jacket.svg" id="1_b24sl"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="2_bvgx7"]
+
+[resource]
+script = ExtResource("2_bvgx7")
+id = &"jacket"
+display_name = "Jaqueta de campo"
+description = "Jaqueta verde militar com bolsos. Aquece e carrega um pouco mais."
+icon = ExtResource("1_b24sl")
+category = 4
+weight = 1.5
+max_durability = 100.0
+equip_slot = 2
+capacity_bonus = 4.0
+world_size = Vector3(0.45, 0.08, 0.35)
+world_color = Color(0.29, 0.33, 0.2, 1)

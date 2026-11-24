@@ -18,9 +18,43 @@ var _crouch_blend := 0.0
 @onready var _arm_l: Node3D = $Body/Hips/Torso/ArmL
 @onready var _arm_r: Node3D = $Body/Hips/Torso/ArmR
 @onready var _torso: Node3D = $Body/Hips/Torso
+@onready var _body: Node3D = $Body
+@onready var _backpack: Node3D = $Body/Hips/Torso/Backpack
+@onready var _upper_meshes: Array[MeshInstance3D] = [
+	$Body/Hips/Torso/Chest, $Body/Hips/Torso/ArmL/Mesh, $Body/Hips/Torso/ArmR/Mesh]
+
+const SHIRT_COLOR := Color(0.42, 0.44, 0.46)
+
+var _upper_material := StandardMaterial3D.new()
+var _dead := false
+
+
+func _ready() -> void:
+	_upper_material.roughness = 0.9
+	_upper_material.albedo_color = SHIRT_COLOR
+	for mesh in _upper_meshes:
+		mesh.material_override = _upper_material
+
+
+## Mostra no corpo o que está equipado (mochila nas costas, jaqueta no tronco).
+func show_equipment(inventory: Inventory) -> void:
+	if not is_node_ready():
+		await ready
+	_backpack.visible = inventory.equipped(ItemData.Slot.BACK) != null
+	var jacket := inventory.equipped(ItemData.Slot.BODY)
+	_upper_material.albedo_color = jacket.data().world_color if jacket and jacket.data() else SHIRT_COLOR
+
+
+func play_death() -> void:
+	_dead = true
+	var tween := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(_body, "rotation:x", -PI * 0.5, 0.7)
+	tween.parallel().tween_property(_body, "position:y", 0.15, 0.7)
 
 
 func update_pose(ground_speed: float, max_speed: float, grounded: bool, crouching: bool, delta: float) -> void:
+	if _dead:
+		return
 	_crouch_blend = lerpf(_crouch_blend, 1.0 if crouching else 0.0, 1.0 - exp(-10.0 * delta))
 	var speed_ratio := clampf(ground_speed / max_speed, 0.0, 1.0)
 

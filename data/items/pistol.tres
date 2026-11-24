@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/pistol.png" id="1_l7boo"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/pistol.glb" id="2_an2uk"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="3_qnxk1"]
+
+[resource]
+script = ExtResource("3_qnxk1")
+id = &"pistol"
+display_name = "Pistola 9 mm"
+description = "Semiautomática, carregador de 15 tiros. O barulho atrai atenção."
+icon = ExtResource("1_l7boo")
+category = 6
+weight = 0.9
+max_durability = 100.0
+equip_slot = 4
+weapon_kind = 2
+damage = 40.0
+attack_range = 60.0
+attack_cooldown = 0.22
+magazine_size = 15
+ammo_item = &"ammo_9mm"
+model = ExtResource("2_an2uk")
+world_rotation = Vector3(0, 30, 90)
+world_size = Vector3(0.03, 0.14, 0.2)
+world_color = Color(0.1, 0.1, 0.1, 1)

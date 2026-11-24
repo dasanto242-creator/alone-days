@@ -56,7 +56,61 @@ func _ready() -> void:
 	img = get_viewport().get_texture().get_image()
 	img.save_png("res://build/screenshots/shot_inventory.png")
 	print("salvo inventário")
+	screen.close()
+	await _weapon_shots(world, player, rig)
 	get_tree().quit()
+
+
+func _weapon_shots(world: Node, player: PlayerController, rig: CameraRig) -> void:
+	var inv := player.inventory
+	var weapons := player.get_node("Weapons") as WeaponHandler
+	for id in [&"baseball_bat", &"pistol"]:
+		inv.add_item(id)
+		player.auto_equip(id)
+	inv.add_item(&"ammo_9mm", 30)
+	# 1) de costas, andando, com taco preso na mochila
+	player.global_position = Vector3(0, 0.05, 12)
+	player.reset_physics_interpolation()
+	rig.set("_yaw_deg", 0.0)
+	rig.set("_pitch_deg", -10.0)
+	Input.action_press("move_forward", 0.45)
+	await _wait(60)
+	Input.action_release("move_forward")
+	_save("shot_w_back.png")
+	# 2) golpe no boneco
+	weapons.set_wielded(ItemData.Slot.MELEE)
+	player.global_position = Vector3(3.5, 0.05, 10.7)
+	player.reset_physics_interpolation()
+	(player.get_node("Visual") as Node3D).rotation.y = 0.0
+	rig.set("_yaw_deg", 60.0)
+	rig.set("_pitch_deg", -8.0)
+	await _wait(40)
+	weapons.attack()
+	await get_tree().create_timer(0.22).timeout
+	_save("shot_w_swing.png")
+	await _wait(40)
+	# 3) pistola mirando na placa
+	weapons.set_wielded(ItemData.Slot.SIDEARM)
+	weapons.reload()
+	player.global_position = Vector3(9.5, 0.05, 14.6)
+	player.reset_physics_interpolation()
+	var board := world.get_node("PracticeTargets/ShootingTarget") as Node3D
+	for i in 10:
+		var cam_pos := get_viewport().get_camera_3d().global_position
+		var to_board := board.global_position + Vector3.UP * 1.35 - cam_pos
+		rig.set("_yaw_deg", rad_to_deg(atan2(-to_board.x, -to_board.z)))
+		rig.set("_pitch_deg", rad_to_deg(asin(to_board.y / to_board.length())))
+		await _wait(12)
+	await _wait(40)
+	_save("shot_w_aim.png")
+	weapons.attack()
+	await _wait(1)
+	_save("shot_w_fire.png")
+
+
+func _save(file: String) -> void:
+	get_viewport().get_texture().get_image().save_png("res://build/screenshots/" + file)
+	print("salvo ", file)
 
 
 func _wait(n: int) -> void:

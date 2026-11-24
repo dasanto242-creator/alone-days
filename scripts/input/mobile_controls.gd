@@ -26,6 +26,9 @@ var _target_label: Label
 @onready var _interact_button: ActionButton = %InteractButton
 @onready var _crouch_button: ActionButton = %CrouchButton
 @onready var _sprint_button: ActionButton = %SprintButton
+@onready var _attack_button: ActionButton = %AttackButton
+@onready var _reload_button: ActionButton = %ReloadButton
+@onready var _weapon_button: ActionButton = %WeaponButton
 
 
 func _ready() -> void:
@@ -44,6 +47,8 @@ func _ready() -> void:
 	_interact_button.add_child(_target_label)
 	Events.interaction_target_changed.connect(_on_interaction_target_changed)
 	Events.modal_changed.connect(func(open: bool) -> void: set_enabled(not open))
+	Events.weapon_state_changed.connect(_on_weapon_state_changed)
+	_on_weapon_state_changed(ItemData.WeaponKind.NONE, "", false)
 	Events.player_movement_state_changed.connect(_on_player_movement_state_changed)
 	get_viewport().size_changed.connect(_apply_safe_area)
 	_apply_safe_area()
@@ -151,6 +156,26 @@ func _on_interaction_target_changed(verb: String, target_name: String) -> void:
 		for finger in _button_fingers.keys():
 			if _button_fingers[finger] == _interact_button:
 				_interact_button.release()
+				_button_fingers.erase(finger)
+
+
+## Botões de arma só aparecem quando fazem sentido.
+func _on_weapon_state_changed(kind: int, _ammo: String, has_weapons: bool) -> void:
+	_set_button_visible(_weapon_button, has_weapons)
+	_weapon_button.highlighted = kind != ItemData.WeaponKind.NONE
+	_set_button_visible(_attack_button, kind != ItemData.WeaponKind.NONE)
+	_attack_button.label = "Atirar" if kind == ItemData.WeaponKind.PISTOL else "Atacar"
+	_set_button_visible(_reload_button, kind == ItemData.WeaponKind.PISTOL)
+
+
+func _set_button_visible(button: ActionButton, value: bool) -> void:
+	if button.visible == value:
+		return
+	button.visible = value
+	if not value:
+		for finger in _button_fingers.keys():
+			if _button_fingers[finger] == button:
+				button.release()
 				_button_fingers.erase(finger)
 
 

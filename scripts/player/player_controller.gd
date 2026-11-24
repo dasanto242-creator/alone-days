@@ -4,10 +4,10 @@ extends CharacterBody3D
 ## Lê apenas ações do InputMap (teclado ou controles touch) e a direção da câmera.
 
 @export_group("Velocidades (m/s)")
-@export var walk_speed := 1.8
+@export var walk_speed := 1.5
 @export var jog_speed := 3.6
 @export var sprint_speed := 5.8
-@export var crouch_speed := 1.3
+@export var crouch_speed := 1.0
 ## Inclinação do joystick a partir da qual o personagem corre em vez de andar.
 @export_range(0.1, 1.0) var jog_threshold := 0.6
 
@@ -34,6 +34,8 @@ var is_sprinting := false
 ## Altura atual do ponto que a câmera segue (suaviza ao agachar).
 var camera_height := 1.55
 var inventory := Inventory.new()
+## Com pistola em mãos o corpo acompanha a câmera (mira); senão vira para onde anda.
+var face_camera := false
 
 var _camera_rig: CameraRig
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
@@ -92,7 +94,9 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	if direction.length_squared() > 0.0:
+	if face_camera and _camera_rig:
+		_visual.rotation.y = lerp_angle(_visual.rotation.y, _camera_rig.get_yaw(), 1.0 - exp(-turn_speed * 1.5 * delta))
+	elif direction.length_squared() > 0.0:
 		var target_yaw := atan2(-direction.x, -direction.z)
 		_visual.rotation.y = lerp_angle(_visual.rotation.y, target_yaw, 1.0 - exp(-turn_speed * delta))
 
@@ -222,7 +226,41 @@ func _on_died() -> void:
 	Events.player_died.emit()
 
 
+# ---------------------------------------------------------------- acesso para outros sistemas
+
+func animator() -> SurvivorAnimator:
+	return _animator
+
+
+func camera_rig() -> CameraRig:
+	return _camera_rig
+
+
+## Direção para onde o corpo está virado.
+func facing() -> Vector3:
+	return -_visual.global_basis.z
+
+
+## Vira o corpo instantaneamente para a direção da câmera (ao atirar).
+func snap_to_camera() -> void:
+	if _camera_rig:
+		_visual.rotation.y = _camera_rig.get_yaw()
+
+
 # ---------------------------------------------------------------- inventário
+
+## Ao pegar uma arma: se o lugar dela no corpo estiver livre, ela vai direto para lá
+## (arma branca nas costas, pistola no coldre).
+func auto_equip(item_id: StringName) -> void:
+	var d := Items.get_item(item_id)
+	if d == null or not d.is_weapon() or d.equip_slot == ItemData.Slot.NONE:
+		return
+	if inventory.equipped(d.equip_slot) != null:
+		return
+	var index := inventory.index_of(item_id)
+	if index >= 0 and inventory.equip(index):
+		Events.notify.emit("%s %s" % [d.display_name, "nas costas" if d.equip_slot == ItemData.Slot.MELEE else "no coldre"])
+
 
 ## Come, bebe ou usa o item da pilha `index`.
 func use_item(index: int) -> bool:

@@ -280,8 +280,10 @@ def build():
 
     arm = build_armature(skel, z_shift)
     backpack = build_backpack(arm, jacket, z_shift)
+    sockets = socket_frames(arm, jacket)
+    holster = build_holster(sockets["Socket_Holster"])
 
-    meshes = [body, shirt, pants, boots, beanie, jacket, backpack] + eyes
+    meshes = [body, shirt, pants, boots, beanie, jacket, backpack, holster] + eyes
     mats.apply_all(meshes, base, region)
 
     for ob in meshes:
@@ -296,6 +298,7 @@ def build():
         print(f"  {ob.name:10s} {t:6d} triângulos")
     print(f"  TOTAL      {total:6d} triângulos")
 
+    add_sockets(arm, sockets)
     if not PREVIEW_ONLY:
         anims.create_all(arm)
     export(OUT)
@@ -477,6 +480,75 @@ def build_backpack(arm, body, z_shift):
     ob = bpy.data.objects.new("Backpack", me)
     bpy.context.scene.collection.objects.link(ob)
     vg = ob.vertex_groups.new(name="spine02")
+    vg.add(list(range(len(me.vertices))), 1.0, "REPLACE")
+    return ob
+
+
+# ---------------------------------------------------------------- pontos de fixação (armas)
+SOCKET_BONES = {"Socket_Hand_R": "wrist.R", "Socket_Back": "spine02", "Socket_Back_Pack": "spine02",
+                "Socket_Holster": "upperleg01.R"}
+
+
+def _frame(pos, fwd, up):
+    """Matriz com +Y = frente da arma e +Z = eixo do polegar/cabo."""
+    y = fwd.normalized()
+    z = (up - y * up.dot(y)).normalized()
+    x = y.cross(z)
+    m = Matrix((x, y, z)).transposed().to_4x4()
+    m.translation = pos
+    return m
+
+
+def socket_frames(arm, jacket):
+    b = arm.data.bones
+    h = lambda n: b[n].head_local
+    wr, el = h("wrist.R"), h("lowerarm01.R")
+    thumb = (h("finger2-1.R") - h("finger5-1.R")).normalized()
+    palm = wr + (h("finger3-1.R") - wr) * 0.55
+    back = [v.co.y for v in jacket.data.vertices if h("spine02").z < v.co.z < h("spine01").z + 0.05 and abs(v.co.x) < 0.1]
+    back_y = sorted(back)[-max(len(back) // 20, 1)]
+    top = h("spine01").z + 0.1
+    down_left = Vector((0.5, 0.0, -1.0))
+    hip = h("upperleg01.R")
+    return {
+        "Socket_Hand_R": _frame(palm, wr - el, thumb),
+        # arma branca presa na diagonal: cabo sobre o ombro direito, ponta em direção ao quadril esquerdo
+        "Socket_Back": _frame(Vector((-0.11, back_y + 0.035, top)), Vector((0, 1, 0)), down_left),
+        "Socket_Back_Pack": _frame(Vector((-0.11, back_y + 0.235, top + 0.02)), Vector((0, 1, 0)), down_left),
+        # coldre na lateral da coxa direita: cano para baixo, topo do ferrolho para a frente
+        "Socket_Holster": _frame(Vector((hip.x - 0.1, hip.y + 0.01, hip.z - 0.05)), Vector((0, 0, -1)),
+                                 Vector((0, -1, 0))),
+    }
+
+
+def add_sockets(arm, frames):
+    bpy.context.view_layer.update()
+    for name, m in frames.items():
+        e = bpy.data.objects.new(name, None)
+        e.empty_display_size = 0.05
+        bpy.context.scene.collection.objects.link(e)
+        e.parent = arm
+        e.parent_type = "BONE"
+        e.parent_bone = SOCKET_BONES[name]
+        bpy.context.view_layer.update()
+        e.matrix_world = m
+
+
+def build_holster(frame):
+    """Coldre de couro: envolve ferrolho e cano (a empunhadura fica para fora)."""
+    bm = bmesh.new()
+    geom = bmesh.ops.create_cube(bm, size=1.0)
+    for v in geom["verts"]:
+        # no referencial do encaixe: x lateral, y = direção do cano (para baixo), z = topo do ferrolho
+        local = Vector((v.co.x * 0.042, v.co.y * 0.17 + 0.075, v.co.z * 0.06 + 0.075))
+        v.co = frame @ local
+    bmesh.ops.bevel(bm, geom=bm.edges[:], offset=0.008, segments=2, affect="EDGES", profile=0.5)
+    me = bpy.data.meshes.new("Holster")
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Holster", me)
+    bpy.context.scene.collection.objects.link(ob)
+    vg = ob.vertex_groups.new(name="upperleg01.R")
     vg.add(list(range(len(me.vertices))), 1.0, "REPLACE")
     return ob
 

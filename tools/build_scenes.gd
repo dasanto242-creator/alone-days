@@ -125,6 +125,7 @@ func _build_player() -> Node:
 	col.position.y = 0.9
 
 	_node(Node, "Survival", player, "res://scripts/survival/survival_stats.gd")
+	_node(Node, "Weapons", player, "res://scripts/player/weapon_handler.gd")
 
 	# Modelo 3D do sobrevivente (gerado no Blender por tools/character/build_survivor.py)
 	var visual := _node(Node3D, "Visual", player, "res://scripts/player/survivor_animator.gd")
@@ -184,10 +185,13 @@ func _build_hud() -> Node:
 	joystick.set_anchors_preset(Control.PRESET_FULL_RECT)
 	joystick.unique_name_in_owner = true
 
-	_button(safe, "JumpButton", "jump", "Pular", 50.0, Vector2(-92, -96))
-	_button(safe, "CrouchButton", "crouch", "Agachar", 40.0, Vector2(-212, -70))
-	_button(safe, "SprintButton", "sprint", "Correr", 40.0, Vector2(-98, -222))
-	_button(safe, "InteractButton", "interact", "", 46.0, Vector2(-236, -206))
+	_button(safe, "JumpButton", "jump", "Pular", 48.0, Vector2(-90, -95))
+	_button(safe, "AttackButton", "attack", "Atacar", 54.0, Vector2(-212, -140))
+	_button(safe, "CrouchButton", "crouch", "Agachar", 38.0, Vector2(-310, -62))
+	_button(safe, "SprintButton", "sprint", "Correr", 38.0, Vector2(-88, -215))
+	_button(safe, "ReloadButton", "reload", "Recarregar", 34.0, Vector2(-196, -262))
+	_button(safe, "WeaponButton", "weapon", "Arma", 34.0, Vector2(-318, -182))
+	_button(safe, "InteractButton", "interact", "", 44.0, Vector2(-420, -120))
 
 	# Indicadores de sobrevivência (canto superior direito)
 	var stats_hud := _node(Control, "SurvivalHud", safe, "res://scripts/ui/survival_hud.gd") as Control
@@ -206,6 +210,8 @@ func _build_hud() -> Node:
 	inv_btn.offset_right = -158
 	inv_btn.offset_top = 18
 	inv_btn.offset_bottom = 86
+
+	_node(Control, "WeaponHud", hud, "res://scripts/ui/weapon_hud.gd")
 
 	var notes := _node(VBoxContainer, "Notifications", hud, "res://scripts/ui/notifications.gd") as VBoxContainer
 	notes.anchor_left = 0.5
@@ -487,9 +493,14 @@ func _item(id: String, display_name: String, desc: String, category: int, weight
 	d.world_shape = shape
 	d.world_size = size
 	d.world_color = color
-	var icon_path := "res://assets/icons/items/%s.svg" % id
-	if ResourceLoader.exists(icon_path):
-		d.icon = load(icon_path)
+	for ext in ["svg", "png"]:
+		var icon_path := "res://assets/icons/items/%s.%s" % [id, ext]
+		if ResourceLoader.exists(icon_path):
+			d.icon = load(icon_path)
+			break
+	var model_path := "res://assets/models/weapons/%s.glb" % id
+	if ResourceLoader.exists(model_path):
+		d.model = load(model_path)
 	for key in extra:
 		d.set(key, extra[key])
 	return d
@@ -520,6 +531,24 @@ func _build_items() -> bool:
 		_item("jacket", "Jaqueta de campo", "Jaqueta verde militar com bolsos. Aquece e carrega um pouco mais.",
 			C.CLOTHING, 1.5, 1, W.BOX, Vector3(0.45, 0.08, 0.35), Color(0.29, 0.33, 0.2),
 			{"equip_slot": ItemData.Slot.BODY, "capacity_bonus": 4.0, "max_durability": 100.0}),
+		_item("baseball_bat", "Taco de beisebol", "Madeira maciça. Pesado e lento, mas derruba qualquer coisa.",
+			C.WEAPON, 1.0, 1, W.BOX, Vector3(0.07, 0.07, 0.85), Color(0.62, 0.45, 0.28),
+			{"equip_slot": ItemData.Slot.MELEE, "weapon_kind": ItemData.WeaponKind.MELEE, "damage": 35.0,
+			"attack_range": 1.7, "attack_stamina": 14.0, "attack_cooldown": 0.8, "max_durability": 100.0,
+			"world_rotation": Vector3(90, 35, 0)}),
+		_item("pipe_wrench", "Chave grifo", "Chave de cano de aço. Lenta, mas cada golpe conta.",
+			C.WEAPON, 1.6, 1, W.BOX, Vector3(0.05, 0.05, 0.45), Color(0.55, 0.08, 0.06),
+			{"equip_slot": ItemData.Slot.MELEE, "weapon_kind": ItemData.WeaponKind.MELEE, "damage": 45.0,
+			"attack_range": 1.5, "attack_stamina": 18.0, "attack_cooldown": 0.95, "max_durability": 140.0,
+			"world_rotation": Vector3(90, -20, 0)}),
+		_item("pistol", "Pistola 9 mm", "Semiautomática, carregador de 15 tiros. O barulho atrai atenção.",
+			C.WEAPON, 0.9, 1, W.BOX, Vector3(0.03, 0.14, 0.2), Color(0.1, 0.1, 0.1),
+			{"equip_slot": ItemData.Slot.SIDEARM, "weapon_kind": ItemData.WeaponKind.PISTOL, "damage": 40.0,
+			"attack_range": 60.0, "attack_cooldown": 0.22, "magazine_size": 15, "ammo_item": &"ammo_9mm",
+			"max_durability": 100.0, "world_rotation": Vector3(0, 30, 90)}),
+		_item("ammo_9mm", "Munição 9 mm", "Cartuchos para pistola.",
+			C.AMMO, 0.012, 60, W.BOX, Vector3(0.08, 0.04, 0.055), Color(0.42, 0.3, 0.16),
+			{"world_rotation": Vector3(0, 20, 0)}),
 	]
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://data/items"))
 	var catalog := ItemCatalog.new()
@@ -561,3 +590,70 @@ func _build_loot(root: Node) -> void:
 	_pickup(loot, "can_beans", Vector3(11.3, 1.5, -5.2))
 	# Na estrada
 	_pickup(loot, "soda_can", Vector3(-12.6, 0.02, -8.0))
+	# Armas e munição
+	_pickup(loot, "baseball_bat", Vector3(6.6, 0.04, 4.8))
+	_pickup(loot, "pipe_wrench", Vector3(10.4, 0.03, 1.0))
+	_pickup(loot, "pistol", Vector3(2.5, 0.87, -15.3))
+	_pickup(loot, "ammo_9mm", Vector3(-11.0, 0.0, 7.2), 15)
+	_pickup(loot, "ammo_9mm", Vector3(-2.6, 0.1, -15.6), 15)
+	_build_targets(root)
+
+
+func _build_targets(root: Node) -> void:
+	var targets := _node(Node3D, "PracticeTargets", root)
+	var wood := Color(0.34, 0.26, 0.18)
+	# Placa de tiro: postes + placa com anéis
+	var board := _node(StaticBody3D, "ShootingTarget", targets, "res://scripts/world/practice_target.gd") as StaticBody3D
+	board.position = Vector3(14, 0, 13)
+	board.rotation_degrees.y = -70
+	board.collision_layer = LAYER_WORLD
+	var bshape := BoxShape3D.new()
+	bshape.size = Vector3(0.9, 0.9, 0.08)
+	var bcol := _node(CollisionShape3D, "Collision", board) as CollisionShape3D
+	bcol.shape = bshape
+	bcol.position.y = 1.35
+	var bvis := _node(Node3D, "Visual", board) as Node3D
+	bvis.position.y = 0.9
+	var plate := BoxMesh.new()
+	plate.size = Vector3(0.9, 0.9, 0.05)
+	_mesh(bvis, "Board", plate, Color(0.82, 0.78, 0.66), Vector3(0, 0.45, 0))
+	for i in 3:
+		var ring := CylinderMesh.new()
+		ring.top_radius = 0.36 - i * 0.12
+		ring.bottom_radius = ring.top_radius
+		ring.height = 0.006 * (i + 1)
+		var mi := _mesh(bvis, "Ring%d" % i, ring, Color(0.55, 0.12, 0.1) if i % 2 == 0 else Color(0.82, 0.78, 0.66),
+			Vector3(0, 0.45, 0.026))
+		mi.rotation_degrees.x = 90
+	for sx in [-0.38, 0.38]:
+		var post := BoxMesh.new()
+		post.size = Vector3(0.07, 1.4, 0.07)
+		_mesh(board, "Post%d" % int(sx * 10), post, wood, Vector3(sx, 0.7, -0.05))
+	# Boneco de pancada: saco pendurado num poste
+	var dummy := _node(StaticBody3D, "TrainingDummy", targets, "res://scripts/world/practice_target.gd") as StaticBody3D
+	dummy.position = Vector3(3.5, 0, 9.5)
+	dummy.collision_layer = LAYER_WORLD
+	dummy.set("swing_degrees", 22.0)
+	var dshape := CapsuleShape3D.new()
+	dshape.radius = 0.25
+	dshape.height = 1.2
+	var dcol := _node(CollisionShape3D, "Collision", dummy) as CollisionShape3D
+	dcol.shape = dshape
+	dcol.position.y = 1.1
+	var dvis := _node(Node3D, "Visual", dummy) as Node3D
+	dvis.position.y = 1.85
+	var sack := CapsuleMesh.new()
+	sack.radius = 0.24
+	sack.height = 1.0
+	_mesh(dvis, "Sack", sack, Color(0.45, 0.38, 0.26), Vector3(0, -0.75, 0))
+	var rope := CylinderMesh.new()
+	rope.top_radius = 0.015
+	rope.bottom_radius = 0.015
+	rope.height = 0.25
+	_mesh(dvis, "Rope", rope, Color(0.3, 0.25, 0.18), Vector3(0, -0.12, 0))
+	var pole := BoxMesh.new()
+	pole.size = Vector3(0.08, 2.0, 0.08)
+	_mesh(dummy, "Pole", pole, wood, Vector3(0, 1.0, -0.5))
+	var arm := BoxMesh.new()
+	arm.size = Vector3(0.06, 0.06, 0.6)
+	_mesh(dummy, "Arm", arm, wood, Vector3(0, 1.95, -0.22))

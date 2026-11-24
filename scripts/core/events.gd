@@ -21,3 +21,9 @@ signal modal_changed(is_open: bool)
 
 ## O jogador morreu.
 signal player_died
+
+## Arma em mãos mudou. kind = ItemData.WeaponKind; ammo_text vazio para armas brancas.
+signal weapon_state_changed(kind: int, ammo_text: String, has_weapons: bool)
+
+## Algo foi atingido por um ataque (para efeitos e testes).
+signal hit_landed(target: Node, amount: float, point: Vector3)

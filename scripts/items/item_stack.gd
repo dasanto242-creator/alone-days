@@ -7,6 +7,8 @@ var item_id: StringName
 var quantity := 1
 ## Estado de 0 a 100 (%). Só tem efeito em itens com max_durability > 0.
 var durability := 100.0
+## Munição no carregador (armas de fogo).
+var loaded := 0
 
 
 func _init(id: StringName = &"", qty := 1, condition := 100.0) -> void:
@@ -25,8 +27,10 @@ func weight() -> float:
 
 
 func to_dict() -> Dictionary:
-	return {"id": String(item_id), "qty": quantity, "dur": durability}
+	return {"id": String(item_id), "qty": quantity, "dur": durability, "loaded": loaded}
 
 
 static func from_dict(d: Dictionary) -> ItemStack:
-	return ItemStack.new(StringName(d.get("id", "")), int(d.get("qty", 1)), float(d.get("dur", 100.0)))
+	var s := ItemStack.new(StringName(d.get("id", "")), int(d.get("qty", 1)), float(d.get("dur", 100.0)))
+	s.loaded = int(d.get("loaded", 0))
+	return s

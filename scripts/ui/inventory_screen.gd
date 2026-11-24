@@ -3,8 +3,9 @@ extends Control
 ## Tela de inventário feita para toque: toque num item para selecionar e use os
 ## botões grandes do painel à direita (menu contextual) — sem depender de arrastar.
 
-const SLOT_SIZE := Vector2(108, 108)
-const SLOT_NAMES := {ItemData.Slot.BACK: "Costas", ItemData.Slot.BODY: "Corpo"}
+const SLOT_SIZE := Vector2(100, 100)
+const SLOT_NAMES := {ItemData.Slot.BACK: "Costas", ItemData.Slot.BODY: "Corpo",
+	ItemData.Slot.MELEE: "Arma branca", ItemData.Slot.SIDEARM: "Coldre"}
 
 var _player: PlayerController
 var _selected_index := -1

@@ -308,11 +308,113 @@ func _run_stage2() -> void:
 	await _frames(2)
 	_check("Fechar volta aos controles", not screen.visible and controls.visible)
 
+	await _run_weapons()
+
 	# --- Morte
 	stats.apply_damage(500.0)
 	await get_tree().create_timer(1.5).timeout
 	var death := _hud.get_node("DeathScreen") as Control
 	_check("Vida zerada mostra a tela de morte", stats.is_dead and death.visible)
+
+
+# ================================================================ ARMAS
+
+func _run_weapons() -> void:
+	print("\n-- Armas --")
+	var inv := _player.inventory
+	var stats := _player.stats
+	var weapons := _player.get_node("Weapons") as WeaponHandler
+	var animator := _player.get_node("Visual") as SurvivorAnimator
+	var world := _player.get_parent()
+	stats.food = 100.0
+	stats.water = 100.0
+	stats.stamina = 100.0
+
+	# --- Pegar o taco: vai direto para as costas
+	await _approach(Vector3(6.6, 0.0, 4.8))
+	await _tap_action("interact")
+	await _frames(3)
+	var bat := inv.equipped(ItemData.Slot.MELEE)
+	_check("Taco vai direto para as costas", bat != null and bat.item_id == &"baseball_bat")
+	var bat_node := animator.weapon_node(ItemData.Slot.MELEE)
+	_check("Modelo do taco preso nas costas (%s)" % (bat_node.get_parent().name if bat_node else "nenhum"),
+		bat_node != null and String(bat_node.get_parent().name).begins_with("Socket_Back"))
+	var weapon_btn := _hud.get_node("%WeaponButton") as ActionButton
+	var attack_btn := _hud.get_node("%AttackButton") as ActionButton
+	_check("Botão Arma aparece", weapon_btn.visible and not attack_btn.visible)
+
+	# --- Empunhar e golpear o boneco
+	await _tap_action("weapon")
+	await _frames(3)
+	_check("Empunhar: taco na mão (%s)" % bat_node.get_parent().name, bat_node.get_parent().name == "Socket_Hand_R")
+	_check("Botão Atacar aparece", attack_btn.visible and attack_btn.label == "Atacar")
+	var dummy := world.get_node("PracticeTargets/TrainingDummy") as PracticeTarget
+	_teleport(Vector3(3.5, 0.05, 10.6), 0.0)
+	(_player.get_node("Visual") as Node3D).rotation.y = 0.0
+	await _frames(5)
+	var stamina_before := stats.stamina
+	await _tap_action("attack")
+	var tree := animator.get("_tree") as AnimationTree
+	_check("Animação de golpe toca (camada de ação ativa)", tree.get("parameters/action/active"))
+	_check("Camada de segurar arma ativa (%.2f)" % tree.get("parameters/hold/blend_amount"), tree.get("parameters/hold/blend_amount") > 0.0)
+	await get_tree().create_timer(0.6).timeout
+	_check("Golpe acerta o boneco (acertos: %d)" % dummy.hits, dummy.hits == 1)
+	_check("Golpe gasta stamina (%.0f → %.0f)" % [stamina_before, stats.stamina], stats.stamina < stamina_before)
+	_check("Golpe gasta durabilidade (%.0f%%)" % bat.durability, bat.durability < 100.0)
+	await get_tree().create_timer(0.6).timeout
+
+	# --- Pegar a pistola: vai para o coldre
+	await _approach(Vector3(2.5, 0.1, -15.3))
+	await _tap_action("interact")
+	await _frames(3)
+	var pistol := inv.equipped(ItemData.Slot.SIDEARM)
+	_check("Pistola vai para o coldre", pistol != null and pistol.item_id == &"pistol")
+	var pistol_node := animator.weapon_node(ItemData.Slot.SIDEARM)
+	_check("Modelo da pistola no coldre", pistol_node != null and pistol_node.get_parent().name == "Socket_Holster")
+	var holster := _player.get_node("Visual/Model").find_child("Holster", true, false) as Node3D
+	_check("Coldre aparece na coxa", holster.visible)
+
+	# --- Trocar para a pistola
+	await _tap_action("weapon")
+	await _frames(3)
+	_check("Trocar arma: pistola na mão, taco volta às costas",
+		pistol_node.get_parent().name == "Socket_Hand_R" and String(bat_node.get_parent().name).begins_with("Socket_Back"))
+	var reload_btn := _hud.get_node("%ReloadButton") as ActionButton
+	_check("Botões Atirar e Recarregar aparecem", attack_btn.label == "Atirar" and reload_btn.visible)
+	_check("Com pistola o corpo acompanha a câmera", _player.face_camera)
+
+	# --- Sem munição / recarregar
+	await _tap_action("attack")
+	await _frames(3)
+	_check("Sem munição não dispara (carregador %d)" % pistol.loaded, pistol.loaded == 0)
+	inv.add_item(&"ammo_9mm", 30)
+	await _tap_action("reload")
+	await get_tree().create_timer(1.3).timeout
+	_check("Recarregar: 15 no carregador, 15 na mochila (%d / %d)" % [pistol.loaded, inv.count_of(&"ammo_9mm")],
+		pistol.loaded == 15 and inv.count_of(&"ammo_9mm") == 15)
+
+	# --- Atirar na placa de treino
+	var board := world.get_node("PracticeTargets/ShootingTarget") as PracticeTarget
+	_teleport(Vector3(8.4, 0.05, 15.05), 0.0)
+	for i in 10:  # mira no centro da placa (a câmera orbita, então ajusta algumas vezes)
+		var cam_pos := get_viewport().get_camera_3d().global_position
+		var to_board := board.global_position + Vector3.UP * 1.35 - cam_pos
+		_rig.set("_yaw_deg", rad_to_deg(atan2(-to_board.x, -to_board.z)))
+		_rig.set("_pitch_deg", rad_to_deg(asin(to_board.y / to_board.length())))
+		await _frames(12)
+	await _tap_action("attack")
+	await _frames(4)
+	_check("Tiro gasta munição (%d)" % pistol.loaded, pistol.loaded == 14)
+	_check("Tiro acerta a placa (acertos: %d)" % board.hits, board.hits == 1)
+	var impacts := world.find_children("*", "ImpactEffect", false, false).size()
+	_check("Marca de tiro aparece (%d)" % impacts, impacts >= 1)
+	await get_tree().create_timer(0.4).timeout
+
+	# --- Guardar
+	await _tap_action("weapon")
+	await _frames(3)
+	_check("Guardar: mãos livres, pistola no coldre",
+		weapons.wielded_slot == -1 and pistol_node.get_parent().name == "Socket_Holster" and not attack_btn.visible)
 
 
 func _approach(item_pos: Vector3) -> void:

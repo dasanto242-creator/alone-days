@@ -32,7 +32,7 @@
 | 2.7 | Tela de inventário por toque com ações contextuais (Comer, Beber, Usar, Equipar, Largar) | ✅ Concluído (testado) |
 | 2.8 | HUD discreta (vida, fome, sede, stamina), avisos na tela, tela de morte | ✅ Concluído |
 
-**Testes automáticos:** `tools/smoke_test.tscn` — 59 verificações, 59 aprovadas (rodam também no GitHub a cada build).
+**Testes automáticos:** `tools/smoke_test.tscn` — 81 verificações, 81 aprovadas (rodam também no GitHub a cada build).
 
 ## Com problemas / limitações conhecidas
 - Rosto ainda sem textura fotográfica (pele procedural); cabelo raspado pintado sob o gorro.
@@ -40,11 +40,24 @@
 - Temperatura, sangramento e doenças ficam para uma etapa seguinte (a estrutura de atributos já comporta).
 - Ainda sem salvamento: fechar o jogo reinicia a partida.
 
+## Armas (antecipado da Etapa 6)
+| Item | Status |
+|---|---|
+| Modelos 3D próprios: taco de beisebol, chave grifo, pistola 9 mm, caixa de munição, coldre | ✅ |
+| Ao pegar: arma branca vai para as costas (sobre a mochila se houver), pistola para o coldre da coxa | ✅ |
+| Botão "Arma" alterna mãos livres → arma branca → pistola | ✅ |
+| Golpe com as duas mãos: gasta stamina, desgasta a arma, acerta o que estiver à frente | ✅ |
+| Pistola: mira no centro da tela, coice, clarão, marca de tiro, carregador de 15, recarga com munição da mochila | ✅ |
+| Alvos de treino: placa de tiro e boneco de pancada | ✅ |
+| Dano em infectados | ⏳ Etapa 3 (as armas já usam `apply_damage`) |
+| Sons de disparo/golpe | ⏳ Etapa 5 |
+
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).
 - ~22 mil triângulos, 67 ossos, texturas próprias comprimidas para celular.
 - Jaqueta e mochila só aparecem quando equipadas.
-- Animações: idle, walk, run, sprint, crouch_idle, crouch_walk, jump, death (velocidade de reprodução acompanha a velocidade real).
+- Animações (v2, com peso e impacto: IK de braços e pernas, quadril que afunda no apoio, contra-rotação do tronco): idle, walk, run, sprint, crouch_idle, crouch_walk, jump, death, hold_melee, attack_melee, hold_pistol, fire_pistol, reload_pistol.
+- Animação em camadas (AnimationTree): pernas seguem a locomoção, tronco e braços seguram a arma, golpe/disparo por cima.
 
 ## Próximos passos
 2. Sistema de salvamento (inventário e atributos já são serializáveis).

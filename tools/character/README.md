@@ -22,4 +22,7 @@ git clone --depth 1 https://github.com/makehumancommunity/makehuman /tmp/mh
 - `survivor_anims.py` — animações por código com cinemática inversa nas pernas:
   idle, walk, run, sprint, crouch_idle, crouch_walk, jump, death.
 
+- `build_weapons.py` — taco, chave grifo, pistola e munição (GLB em `assets/models/weapons/`) e seus ícones:
+  `~/blender-venv/bin/python tools/character/build_weapons.py assets/models/weapons assets/icons/items`
+
 Para mudar a aparência: ajuste `BODY_TARGETS` (forma do corpo) e as cores em `GARMENTS`/`SKIN`.

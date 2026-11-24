@@ -82,6 +82,30 @@ func take_from(index: int, quantity := 1) -> ItemStack:
 	return ItemStack.new(s.item_id, n, s.durability)
 
 
+func index_of(item_id: StringName) -> int:
+	for i in stacks.size():
+		if stacks[i].item_id == item_id:
+			return i
+	return -1
+
+
+## Remove até `quantity` unidades de um item (de qualquer pilha). Retorna quantas removeu.
+func consume(item_id: StringName, quantity: int) -> int:
+	var removed := 0
+	while removed < quantity:
+		var i := index_of(item_id)
+		if i < 0:
+			break
+		var n := mini(quantity - removed, stacks[i].quantity)
+		stacks[i].quantity -= n
+		removed += n
+		if stacks[i].quantity <= 0:
+			stacks.remove_at(i)
+	if removed > 0:
+		changed.emit()
+	return removed
+
+
 func count_of(item_id: StringName) -> int:
 	var total := 0
 	for s in stacks:
@@ -101,7 +125,9 @@ func equip(index: int) -> bool:
 	stacks.remove_at(index)
 	if equipment.has(d.equip_slot):
 		stacks.append(equipment[d.equip_slot])
-	equipment[d.equip_slot] = ItemStack.new(s.item_id, 1, s.durability)
+	var worn := ItemStack.new(s.item_id, 1, s.durability)
+	worn.loaded = s.loaded
+	equipment[d.equip_slot] = worn
 	if s.quantity > 1:
 		stacks.insert(index, ItemStack.new(s.item_id, s.quantity - 1, s.durability))
 	changed.emit()

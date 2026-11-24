@@ -57,6 +57,12 @@ func get_pitch_degrees() -> float:
 	return _pitch_deg
 
 
+## Coice da arma: levanta a mira um pouco.
+func add_recoil(degrees: float) -> void:
+	_pitch_deg = clampf(_pitch_deg + degrees, min_pitch, max_pitch)
+	_yaw_deg += randf_range(-0.4, 0.4) * degrees
+
+
 func enter_indoor() -> void:
 	_indoor_count += 1
 

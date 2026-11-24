@@ -52,6 +52,8 @@ func interact(actor: Node) -> void:
 		Events.notify.emit("Sem espaço para %s" % d.display_name)
 		return
 	Events.notify.emit("+%d %s" % [added, d.display_name] if added > 1 else "+ %s" % d.display_name)
+	if actor.has_method("auto_equip"):
+		actor.auto_equip(item_id)
 	quantity -= added
 	if quantity <= 0:
 		queue_free()
@@ -60,6 +62,18 @@ func interact(actor: Node) -> void:
 
 
 func _build_visual(d: ItemData) -> void:
+	if d.model:
+		var m := d.model.instantiate() as Node3D
+		m.rotation_degrees = d.world_rotation
+		m.position.y = 0.035  # a origem das armas é a empunhadura: levanta para não afundar no chão
+		add_child(m)
+		var hit := SphereShape3D.new()
+		hit.radius = 0.3
+		var c := CollisionShape3D.new()
+		c.shape = hit
+		c.position.y = 0.1
+		add_child(c)
+		return
 	var size := d.world_size
 	var mesh: Mesh
 	match d.world_shape:

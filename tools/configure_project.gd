@@ -58,6 +58,9 @@ func _init() -> void:
 	_action("crouch", [KEY_C])
 	_action("interact", [KEY_E])
 	_action("inventory", [KEY_TAB, KEY_I])
+	_action("weapon", [KEY_Q])
+	_action("attack", [KEY_F])
+	_action("reload", [KEY_R])
 
 	var err := s.save()
 	print("configure_project: ", "OK" if err == OK else "ERRO %d" % err)

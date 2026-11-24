@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/pipe_wrench.png" id="1_4qwrt"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/pipe_wrench.glb" id="2_icjdt"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="3_sdhfc"]
+
+[resource]
+script = ExtResource("3_sdhfc")
+id = &"pipe_wrench"
+display_name = "Chave grifo"
+description = "Chave de cano de aço. Lenta, mas cada golpe conta."
+icon = ExtResource("1_4qwrt")
+category = 6
+weight = 1.6
+max_durability = 140.0
+equip_slot = 3
+weapon_kind = 1
+damage = 45.0
+attack_stamina = 18.0
+attack_cooldown = 0.95
+model = ExtResource("2_icjdt")
+world_rotation = Vector3(90, -20, 0)
+world_size = Vector3(0.05, 0.05, 0.45)
+world_color = Color(0.55, 0.08, 0.06, 1)

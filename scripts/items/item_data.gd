@@ -5,7 +5,8 @@ extends Resource
 ## arquivo — nenhum código novo é necessário.
 
 enum Category { FOOD, DRINK, MEDICAL, BACKPACK, CLOTHING, TOOL, WEAPON, AMMO, MISC }
-enum Slot { NONE, BACK, BODY }
+enum Slot { NONE, BACK, BODY, MELEE, SIDEARM }
+enum WeaponKind { NONE, MELEE, PISTOL }
 enum WorldShape { BOX, CYLINDER, BAG }
 
 const CATEGORY_NAMES := {
@@ -38,7 +39,22 @@ const CATEGORY_NAMES := {
 ## Capacidade extra de carga (kg) enquanto equipado.
 @export var capacity_bonus := 0.0
 
+@export_group("Arma")
+@export var weapon_kind: WeaponKind = WeaponKind.NONE
+@export var damage := 0.0
+## Alcance em metros (golpe ou tiro).
+@export var attack_range := 1.5
+@export var attack_stamina := 0.0
+## Tempo mínimo entre ataques/disparos (s).
+@export var attack_cooldown := 0.8
+@export var magazine_size := 0
+@export var ammo_item: StringName = &""
+
 @export_group("No mundo")
+## Modelo 3D (.glb). Sem modelo, usa uma forma simples (world_shape).
+@export var model: PackedScene
+## Rotação do modelo quando largado no chão (graus).
+@export var world_rotation := Vector3.ZERO
 @export var world_shape: WorldShape = WorldShape.BOX
 @export var world_size := Vector3(0.2, 0.2, 0.2)
 @export var world_color := Color(0.5, 0.5, 0.5)
@@ -46,6 +62,10 @@ const CATEGORY_NAMES := {
 
 func is_usable() -> bool:
 	return not use_verb.is_empty()
+
+
+func is_weapon() -> bool:
+	return weapon_kind != WeaponKind.NONE
 
 
 func is_equipment() -> bool:

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/baseball_bat.png" id="1_7colo"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/baseball_bat.glb" id="2_pnnwx"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="3_mvfk5"]
+
+[resource]
+script = ExtResource("3_mvfk5")
+id = &"baseball_bat"
+display_name = "Taco de beisebol"
+description = "Madeira maciça. Pesado e lento, mas derruba qualquer coisa."
+icon = ExtResource("1_7colo")
+category = 6
+weight = 1.0
+max_durability = 100.0
+equip_slot = 3
+weapon_kind = 1
+damage = 35.0
+attack_range = 1.7
+attack_stamina = 14.0
+model = ExtResource("2_pnnwx")
+world_rotation = Vector3(90, 35, 0)
+world_size = Vector3(0.07, 0.07, 0.85)
+world_color = Color(0.62, 0.45, 0.28, 1)

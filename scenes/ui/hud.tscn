@@ -1,0 +1,146 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/input/mobile_controls.gd" id="1_8qguk"]
+[ext_resource type="Script" path="res://scripts/input/touch_joystick.gd" id="2_136eg"]
+[ext_resource type="Script" path="res://scripts/input/action_button.gd" id="3_oj5la"]
+[ext_resource type="Script" path="res://scripts/diagnostics/performance_overlay.gd" id="4_gss2c"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h022r"]
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+bg_color = Color(0.04, 0.05, 0.04, 0.6)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="HUD" type="CanvasLayer" unique_id=1472386918]
+
+[node name="MobileControls" type="Control" parent="." unique_id=2037768091]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_8qguk")
+
+[node name="SafeArea" type="Control" parent="MobileControls" unique_id=2043069459]
+unique_name_in_owner = true
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Joystick" type="Control" parent="MobileControls/SafeArea" unique_id=786358563]
+unique_name_in_owner = true
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("2_136eg")
+
+[node name="JumpButton" type="Control" parent="MobileControls/SafeArea" unique_id=350185835]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 100)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -142.0
+offset_top = -146.0
+offset_right = -42.0
+offset_bottom = -46.0
+script = ExtResource("3_oj5la")
+action = &"jump"
+label = "Pular"
+radius = 50.0
+
+[node name="CrouchButton" type="Control" parent="MobileControls/SafeArea" unique_id=1196726688]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 80)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -252.0
+offset_top = -110.0
+offset_right = -172.0
+offset_bottom = -30.0
+script = ExtResource("3_oj5la")
+action = &"crouch"
+label = "Agachar"
+radius = 40.0
+
+[node name="SprintButton" type="Control" parent="MobileControls/SafeArea" unique_id=1481258011]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 80)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -138.0
+offset_top = -262.0
+offset_right = -58.0
+offset_bottom = -182.0
+script = ExtResource("3_oj5la")
+action = &"sprint"
+label = "Correr"
+radius = 40.0
+
+[node name="InteractButton" type="Control" parent="MobileControls/SafeArea" unique_id=661431363]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(92, 92)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -282.0
+offset_top = -252.0
+offset_right = -190.0
+offset_bottom = -160.0
+script = ExtResource("3_oj5la")
+action = &"interact"
+radius = 46.0
+
+[node name="PerformanceOverlay" type="PanelContainer" parent="." unique_id=1160957637]
+offset_left = 14.0
+offset_top = 12.0
+offset_right = 14.0
+offset_bottom = 12.0
+mouse_filter = 1
+theme_override_styles/panel = SubResource("StyleBoxFlat_h022r")
+script = ExtResource("4_gss2c")
+
+[node name="VBox" type="VBoxContainer" parent="PerformanceOverlay" unique_id=954876201]
+layout_mode = 2
+
+[node name="StatsLabel" type="Label" parent="PerformanceOverlay/VBox" unique_id=107646629]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.82, 0.84, 0.76, 1)
+text = "FPS --"
+
+[node name="Buttons" type="HBoxContainer" parent="PerformanceOverlay/VBox" unique_id=1958925656]
+layout_mode = 2
+
+[node name="QualityButton" type="Button" parent="PerformanceOverlay/VBox/Buttons" unique_id=58725252]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(132, 36)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 13
+text = "Gráfico"
+
+[node name="FpsButton" type="Button" parent="PerformanceOverlay/VBox/Buttons" unique_id=1260316030]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(132, 36)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 13
+text = "Limite"

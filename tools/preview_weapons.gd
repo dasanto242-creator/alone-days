@@ -40,6 +40,9 @@ func _ready() -> void:
 	# 2) taco na mão
 	_move(bat, model, "Socket_Hand_R")
 	await _shot(player, "hold_melee", 0.0, cam, 30.0, 1.1, 3.4, "w_melee")
+	await _shot(player, "hold_melee", 0.0, cam, 0.0, 1.0, 1.1, "w_hands_front")
+	await _shot(player, "hold_melee", 0.0, cam, 60.0, 1.0, 1.1, "w_hands_side")
+	await _shot(player, "hold_melee", 0.0, cam, -40.0, 1.0, 1.1, "w_hands_left")
 	for i in 5:
 		await _shot(player, "attack_melee", 0.8 * i / 5.0, cam, 20.0, 1.1, 3.6, "w_attack_%d" % i)
 	# 3) pistola

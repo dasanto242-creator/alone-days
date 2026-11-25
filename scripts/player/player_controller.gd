@@ -17,6 +17,8 @@ extends CharacterBody3D
 @export_range(0.0, 1.0) var air_control := 0.3
 @export var turn_speed := 10.0
 @export var jump_velocity := 4.6
+## Altura máxima de degrau que o personagem sobe sozinho (calçadas, soleiras, escadas).
+@export var step_height := 0.3
 ## Segundos parado até o sprint desligar sozinho.
 @export var sprint_cancel_delay := 0.6
 
@@ -80,7 +82,7 @@ func _physics_process(delta: float) -> void:
 		_set_sprinting(false)
 		Events.notify.emit("Sem fôlego")
 
-	var target_velocity := direction * _target_speed(strength)
+	var target_velocity := direction * _target_speed(strength) * _direction_factor(direction)
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
 	var rate := acceleration if target_velocity.length_squared() > 0.0 else deceleration
 	if not is_on_floor():
@@ -92,9 +94,10 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
 
+	_try_step_up(delta)
 	move_and_slide()
 
-	if face_camera and _camera_rig:
+	if _aiming() and _camera_rig:
 		_visual.rotation.y = lerp_angle(_visual.rotation.y, _camera_rig.get_yaw(), 1.0 - exp(-turn_speed * 1.5 * delta))
 	elif direction.length_squared() > 0.0:
 		var target_yaw := atan2(-direction.x, -direction.z)
@@ -105,8 +108,66 @@ func _physics_process(delta: float) -> void:
 
 	var ground_speed := Vector2(velocity.x, velocity.z).length()
 	stats.tick(delta, _exertion(ground_speed))
-	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta)
+	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta, _local_move_dir())
 	_update_interaction_focus()
+
+
+## Postura de combate: arma em mãos e sem estar em sprint (no sprint a arma abaixa e o corpo
+## vira para onde corre).
+func _aiming() -> bool:
+	return face_camera and not is_sprinting
+
+
+## Com arma em mãos (corpo virado para a câmera) andar de lado ou de costas é mais lento.
+func _direction_factor(direction: Vector3) -> float:
+	if not _aiming() or direction.length_squared() < 0.001:
+		return 1.0
+	var c := direction.dot(facing())
+	if c >= 0.0:
+		return 0.72 + 0.28 * c
+	return 0.72 + 0.12 * c
+
+
+## Direção do movimento em relação a onde o corpo está virado (x = direita, y = frente).
+func _local_move_dir() -> Vector2:
+	var v := Vector3(velocity.x, 0.0, velocity.z)
+	if not _aiming() or v.length_squared() < 0.01:
+		return Vector2(0, 1)
+	var fwd := facing()
+	var right := fwd.cross(Vector3.UP)
+	return Vector2(v.dot(right), v.dot(fwd)).normalized()
+
+
+## Sobe degraus baixos: se o movimento bate numa borda, testa se cabe por cima e sobe.
+func _try_step_up(delta: float) -> void:
+	if not is_on_floor() or velocity.y > 0.1:
+		return
+	var motion := Vector3(velocity.x, 0.0, velocity.z) * delta
+	if motion.length() < 0.0005:
+		return
+	# pequena folga à frente para detectar a borda antes de encostar
+	var probe := motion + motion.normalized() * 0.05
+	var collision := KinematicCollision3D.new()
+	if not test_move(global_transform, probe, collision):
+		return
+	if collision.get_normal().y > 0.7:
+		return  # é rampa/chão, o move_and_slide resolve
+	var up := Vector3.UP * step_height
+	if test_move(global_transform, up):
+		return  # teto baixo
+	var raised := global_transform.translated(up)
+	if test_move(raised, probe):
+		return  # alto demais (parede)
+	var ahead := raised.translated(probe)
+	var down := KinematicCollision3D.new()
+	if not test_move(ahead, -up * 1.05, down):
+		return  # não há chão depois do degrau
+	if down.get_normal().y < 0.7:
+		return
+	var new_pos := ahead.origin + down.get_travel()
+	if new_pos.y - global_position.y < 0.02:
+		return
+	global_position = new_pos - probe + motion
 
 
 func _exertion(ground_speed: float) -> int:

@@ -10,9 +10,16 @@ extends Node3D
 
 ## Velocidade no chão (m/s) de cada ciclo: distância do pé no apoio / tempo de apoio.
 const NOMINAL_SPEED := {&"walk": 1.3, &"run": 3.57, &"sprint": 5.78, &"crouch_walk": 0.88}
+## Velocidade nominal por direção (frente, trás, lado) dos ciclos direcionais.
+const DIRECTIONAL_SPEED := {&"walk": Vector3(1.3, 1.03, 1.01), &"run": Vector3(3.57, 2.14, 2.5)}
+## Espaços de mistura 2D: x = direita, y = frente.
+const BLEND_SPACES := {
+	&"walk": {&"walk": Vector2(0, 1), &"walk_back": Vector2(0, -1), &"walk_left": Vector2(-1, 0), &"walk_right": Vector2(1, 0)},
+	&"run": {&"run": Vector2(0, 1), &"run_back": Vector2(0, -1), &"run_left": Vector2(-1, 0), &"run_right": Vector2(1, 0)},
+}
 const LOCO: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk", &"jump", &"death"]
 const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
-	&"hold_melee", &"hold_pistol"]
+	&"hold_melee", &"hold_pistol", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left", &"run_right"]
 const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol"]
 const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
@@ -37,6 +44,8 @@ var _holster: Node3D
 var _sockets := {}
 var _weapon_nodes := {}   # slot -> Node3D
 var _weapon_ids := {}     # slot -> StringName
+var _flash_timer := 0.0
+var _shirt: Node3D
 
 
 func _ready() -> void:
@@ -45,6 +54,12 @@ func _ready() -> void:
 	_jacket = _model.find_child("Jacket", true, false) as Node3D
 	_backpack = _model.find_child("Backpack", true, false) as Node3D
 	_holster = _model.find_child("Holster", true, false) as Node3D
+	_shirt = _model.find_child("Shirt", true, false) as Node3D
+	# peças pequenas não precisam projetar sombra (economiza uma passada de desenho)
+	for small in ["Eyes", "Holster"]:
+		var g := _model.find_child(small, true, false) as GeometryInstance3D
+		if g:
+			g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	if _holster:
 		_holster.visible = false
 	for socket in ["Socket_Hand_R", "Socket_Back", "Socket_Back_Pack", "Socket_Holster"]:
@@ -57,11 +72,19 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _flash_timer > 0.0:
+		_flash_timer -= delta
+		if _flash_timer <= 0.0:
+			var weapon: Node3D = _weapon_nodes.get(ItemData.Slot.SIDEARM)
+			if weapon and weapon.has_node("Flash"):
+				(weapon.get_node("Flash") as Node3D).visible = false
 	_hold_amount = move_toward(_hold_amount, _hold_target, delta * 5.0)
 	_tree.set("parameters/hold/blend_amount", _hold_amount)
 
 
-func update_pose(ground_speed: float, _max_speed: float, grounded: bool, crouching: bool, delta: float) -> void:
+## move_dir: direção do movimento em relação ao corpo (x = direita, y = frente).
+func update_pose(ground_speed: float, _max_speed: float, grounded: bool, crouching: bool, delta: float,
+		move_dir := Vector2(0, 1)) -> void:
 	if _dead:
 		return
 	_airborne_time = 0.0 if grounded else _airborne_time + delta
@@ -79,7 +102,16 @@ func update_pose(ground_speed: float, _max_speed: float, grounded: bool, crouchi
 	else:
 		target = &"sprint"
 	var scale := 1.0
-	if NOMINAL_SPEED.has(target):
+	if move_dir.length_squared() < 0.01:
+		move_dir = Vector2(0, 1)
+	move_dir = move_dir.normalized()
+	if DIRECTIONAL_SPEED.has(target):
+		_tree.set("parameters/loco_%s/blend_position" % target, move_dir)
+		var n: Vector3 = DIRECTIONAL_SPEED[target]
+		var w := absf(move_dir.x) + absf(move_dir.y)
+		var nominal := (absf(move_dir.y) * (n.x if move_dir.y > 0.0 else n.y) + absf(move_dir.x) * n.z) / w
+		scale = clampf(ground_speed / nominal, 0.6, 1.5)
+	elif NOMINAL_SPEED.has(target):
 		scale = clampf(ground_speed / NOMINAL_SPEED[target], 0.6, 1.5)
 	_set_loco(target)
 	_tree.set("parameters/loco_speed/scale", scale)
@@ -96,6 +128,8 @@ func show_equipment(inventory: Inventory) -> void:
 		_backpack.visible = inventory.equipped(ItemData.Slot.BACK) != null
 	if _jacket:
 		_jacket.visible = inventory.equipped(ItemData.Slot.BODY) != null
+	if _shirt:
+		_shirt.visible = not (_jacket and _jacket.visible)  # coberta pela jaqueta: não desenha
 	_refresh_weapons(inventory)
 
 
@@ -124,15 +158,27 @@ func muzzle_flash() -> void:
 	var weapon: Node3D = _weapon_nodes.get(ItemData.Slot.SIDEARM)
 	if weapon == null:
 		return
+	var flash := weapon.get_node_or_null("Flash") as Node3D
+	if flash == null:
+		return
+	flash.visible = true
+	_flash_timer = 0.05
+
+
+## Luz + brilho do disparo, criados uma vez junto com a arma e reaproveitados.
+func _attach_flash(weapon: Node3D) -> void:
 	var muzzle := weapon.find_child("Muzzle", true, false) as Node3D
-	var at := muzzle.global_position if muzzle else weapon.global_position
 	var flash := Node3D.new()
-	get_tree().current_scene.add_child(flash)
-	flash.global_position = at
+	flash.name = "Flash"
+	flash.visible = false
+	weapon.add_child(flash)
+	if muzzle:
+		flash.position = weapon.to_local(muzzle.global_position)
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.8, 0.45)
 	light.light_energy = 3.0
 	light.omni_range = 4.0
+	light.shadow_enabled = false
 	flash.add_child(light)
 	var mesh := MeshInstance3D.new()
 	var quad := QuadMesh.new()
@@ -144,8 +190,8 @@ func muzzle_flash() -> void:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color = Color(1.0, 0.85, 0.5, 0.9)
 	mesh.material_override = mat
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	flash.add_child(mesh)
-	get_tree().create_timer(0.05).timeout.connect(flash.queue_free)
 
 
 func play_death() -> void:
@@ -183,8 +229,13 @@ func _refresh_weapons(inventory: Inventory) -> void:
 			_weapon_ids[slot] = id
 			var d := stack.data() if stack else null
 			if d and d.model:
-				_weapon_nodes[slot] = d.model.instantiate()
-				add_child(_weapon_nodes[slot])
+				var w := d.model.instantiate() as Node3D
+				add_child(w)
+				for g in w.find_children("*", "GeometryInstance3D", true, false):
+					(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				if d.weapon_kind == ItemData.WeaponKind.PISTOL:
+					_attach_flash(w)
+				_weapon_nodes[slot] = w
 		if not _weapon_nodes.has(slot):
 			continue
 		var socket := "Socket_Hand_R"
@@ -242,12 +293,29 @@ func _transition(bt: AnimationNodeBlendTree, node_name: String, anims: Array[Str
 		t.add_input(String(anim_name))
 	bt.add_node(node_name, t)
 	for i in anims.size():
-		var a := AnimationNodeAnimation.new()
-		a.animation = anims[i]
 		var n := "%s_%s" % [node_name, anims[i]]
-		bt.add_node(n, a)
+		if node_name == "loco" and BLEND_SPACES.has(anims[i]):
+			bt.add_node(n, _blend_space(BLEND_SPACES[anims[i]]))
+		else:
+			var a := AnimationNodeAnimation.new()
+			a.animation = anims[i]
+			bt.add_node(n, a)
 		bt.connect_node(node_name, i, n)
 	return t
+
+
+func _blend_space(points: Dictionary) -> AnimationNodeBlendSpace2D:
+	var bs := AnimationNodeBlendSpace2D.new()
+	bs.min_space = Vector2(-1, -1)
+	bs.max_space = Vector2(1, 1)
+	for anim_name in points:
+		if not _anim.has_animation(anim_name):
+			continue
+		var a := AnimationNodeAnimation.new()
+		a.animation = anim_name
+		bs.add_blend_point(a, points[anim_name])
+	bs.sync = true  # ciclos sincronizados: as pernas não "embaralham" na mistura
+	return bs
 
 
 ## Liga o filtro só nos ossos do tronco/braços (as pernas continuam com a locomoção).

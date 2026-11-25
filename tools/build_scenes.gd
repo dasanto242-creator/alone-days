@@ -354,6 +354,10 @@ func _build_ground(root: Node) -> void:
 	var road := BoxMesh.new()
 	road.size = Vector3(6, 0.02, 160)
 	_mesh(root, "Road", road, Color(0.16, 0.16, 0.16), Vector3(-12, 0.01, 0))
+	# calçada dos dois lados da estrada (degrau de 15 cm)
+	for sx in [-1.0, 1.0]:
+		_block(root, "Sidewalk%s" % ("L" if sx < 0 else "R"), Vector3(1.6, 0.15, 160),
+			Vector3(-12 + sx * 3.8, 0.075, 0), Color(0.36, 0.36, 0.34))
 
 
 func _build_house(root: Node, origin: Vector3) -> void:
@@ -362,7 +366,7 @@ func _build_house(root: Node, origin: Vector3) -> void:
 	var wall := Color(0.47, 0.45, 0.41)
 	var dark := Color(0.25, 0.24, 0.22)
 	var h := 3.0
-	_block(house, "Floor", Vector3(8, 0.1, 6), Vector3(0, 0.05, 0), dark)
+	_block(house, "Floor", Vector3(7.8, 0.04, 5.8), Vector3(0, 0.02, 0), dark)
 	_block(house, "WallBack", Vector3(8, h, 0.2), Vector3(0, h / 2, -3), wall)
 	_block(house, "WallLeft", Vector3(0.2, h, 6), Vector3(-4, h / 2, 0), wall)
 	_block(house, "WallRight", Vector3(0.2, h, 6), Vector3(4, h / 2, 0), wall)
@@ -373,19 +377,19 @@ func _build_house(root: Node, origin: Vector3) -> void:
 	_block(house, "Table", Vector3(1.6, 0.8, 0.9), Vector3(1.8, 0.45, -1.6), Color(0.33, 0.26, 0.18))
 	_block(house, "Shelf", Vector3(0.5, 1.8, 1.8), Vector3(-3.6, 0.95, -1.5), Color(0.3, 0.25, 0.19))
 
-	# Porta: a dobradiça gira; a porta em si é o objeto interativo
-	var hinge := _node(Node3D, "DoorHinge", house) as Node3D
-	hinge.position = Vector3(-0.6, 0.1, 3)
-	var door := _node(AnimatableBody3D, "Door", hinge, "res://scripts/world/door.gd") as AnimatableBody3D
-	door.position = Vector3(0.6, 1.05, 0)
+	# Porta: o próprio corpo fica na dobradiça e gira (a colisão acompanha)
+	var door := _node(AnimatableBody3D, "Door", house, "res://scripts/world/door.gd") as AnimatableBody3D
+	door.position = Vector3(-0.6, 0.0, 3)
 	door.collision_layer = LAYER_WORLD | LAYER_INTERACTABLE
 	door.collision_mask = 0
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(1.16, 2.1, 0.08)
-	(_node(CollisionShape3D, "Collision", door) as CollisionShape3D).shape = shape
+	var door_col := _node(CollisionShape3D, "Collision", door) as CollisionShape3D
+	door_col.shape = shape
+	door_col.position = Vector3(0.6, 1.07, 0)
 	var mesh := BoxMesh.new()
 	mesh.size = shape.size
-	_mesh(door, "Mesh", mesh, Color(0.36, 0.27, 0.18))
+	_mesh(door, "Mesh", mesh, Color(0.36, 0.27, 0.18), Vector3(0.6, 1.07, 0))
 
 	# Volume interno: a câmera se aproxima quando o jogador entra
 	var zone := _node(Area3D, "IndoorZone", house, "res://scripts/world/indoor_zone.gd") as Area3D
@@ -442,6 +446,8 @@ func _build_props(root: Node) -> void:
 
 
 func _build_trees(root: Node) -> void:
+	"""Árvores: colisões individuais (só o tronco), mas o visual em 2 MultiMesh —
+	40 árvores viram 2 chamadas de desenho em vez de 80."""
 	var trees := _node(Node3D, "Trees", root)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
@@ -450,33 +456,41 @@ func _build_trees(root: Node) -> void:
 	trunk_mesh.bottom_radius = 0.24
 	trunk_mesh.height = 4.0
 	trunk_mesh.radial_segments = 8
+	trunk_mesh.material = _mat(Color(0.25, 0.2, 0.15))
 	var crown_mesh := CylinderMesh.new()
 	crown_mesh.top_radius = 0.0
 	crown_mesh.bottom_radius = 1.7
 	crown_mesh.height = 4.5
 	crown_mesh.radial_segments = 8
+	crown_mesh.material = _mat(Color(0.15, 0.21, 0.13))
 	var trunk_shape := CylinderShape3D.new()
 	trunk_shape.radius = 0.22
 	trunk_shape.height = 4.0
-	var placed := 0
-	while placed < 40:
+	var xforms: Array[Transform3D] = []
+	while xforms.size() < 40:
 		var p := Vector3(rng.randf_range(-70, 70), 0, rng.randf_range(-70, 70))
 		if absf(p.x) < 18 and absf(p.z) < 24:
 			continue
-		if absf(p.x + 12) < 5:
+		if absf(p.x + 12) < 6:
 			continue
-		var tree := _node(StaticBody3D, "Tree%d" % placed, trees) as StaticBody3D
-		tree.position = p
-		tree.rotation.y = rng.randf() * TAU
-		tree.scale = Vector3.ONE * rng.randf_range(0.8, 1.3)
-		tree.collision_layer = LAYER_WORLD
-		tree.collision_mask = 0
-		var col := _node(CollisionShape3D, "Collision", tree) as CollisionShape3D
+		var t := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(0.8, 1.3)), p)
+		xforms.append(t)
+		var body := _node(StaticBody3D, "Tree%d" % (xforms.size() - 1), trees) as StaticBody3D
+		body.transform = t
+		body.collision_layer = LAYER_WORLD
+		body.collision_mask = 0
+		var col := _node(CollisionShape3D, "Collision", body) as CollisionShape3D
 		col.shape = trunk_shape
 		col.position.y = 2.0
-		_mesh(tree, "Trunk", trunk_mesh, Color(0.25, 0.2, 0.15), Vector3(0, 2.0, 0))
-		_mesh(tree, "Crown", crown_mesh, Color(0.15, 0.21, 0.13), Vector3(0, 5.2, 0))
-		placed += 1
+	for part in [["TrunksMesh", trunk_mesh, 2.0], ["CrownsMesh", crown_mesh, 5.2]]:
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = part[1]
+		mm.instance_count = xforms.size()
+		for i in xforms.size():
+			mm.set_instance_transform(i, xforms[i] * Transform3D(Basis(), Vector3(0, part[2], 0)))
+		var mmi := _node(MultiMeshInstance3D, part[0], trees) as MultiMeshInstance3D
+		mmi.multimesh = mm
 
 
 # ---------------------------------------------------------------- itens

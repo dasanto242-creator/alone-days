@@ -104,13 +104,30 @@ func _run() -> void:
 	var interact_btn := _hud.get_node("%InteractButton") as ActionButton
 	_check("Botão Interagir aparece perto da porta ('%s')" % interact_btn.label,
 		interact_btn.visible and interact_btn.label == "Abrir")
-	var hinge := _player.get_parent().get_node("House/DoorHinge") as Node3D
+	var hinge := _player.get_parent().get_node("House/Door") as Node3D
 	_touch(3, interact_btn.get_global_rect().get_center(), true)
 	await _frames(2)
 	_touch(3, Vector2.ZERO, false)
 	await _frames(40)
 	_check("Porta abre (%.0f°)" % rad_to_deg(hinge.rotation.y), absf(rad_to_deg(hinge.rotation.y)) > 80.0)
 	_check("Texto muda para 'Fechar'", interact_btn.label == "Fechar")
+	_teleport(Vector3(0, 0.05, -9.0), 0.0)
+	_rig.set("_yaw_deg", 0.0)
+	await _frames(5)
+	Input.action_press("move_forward")
+	await _frames(100)
+	Input.action_release("move_forward")
+	_check("Entra andando pela porta aberta (z %.2f)" % _player.global_position.z, _player.global_position.z < -12.0)
+	# degrau: sobe na calçada (15 cm) andando, sem pular
+	_teleport(Vector3(-6.5, 0.05, -4.0), 0.0)
+	_rig.set("_yaw_deg", 90.0)
+	await _frames(5)
+	Input.action_press("move_forward")
+	await _frames(32)
+	Input.action_release("move_forward")
+	await _frames(10)
+	_check("Sobe a calçada andando (x %.2f, y %.2f)" % [_player.global_position.x, _player.global_position.y],
+		_player.global_position.x < -7.6 and _player.global_position.y > 0.12)
 
 	# --- Entrar na casa: câmera se aproxima
 	_teleport(Vector3(0, 0.15, -14), 0.0)
@@ -383,6 +400,29 @@ func _run_weapons() -> void:
 	_check("Botões Atirar e Recarregar aparecem", attack_btn.label == "Atirar" and reload_btn.visible)
 	_check("Com pistola o corpo acompanha a câmera", _player.face_camera)
 
+	# --- Andar de lado / de costas com arma em mãos (animações direcionais)
+	_teleport(Vector3(0, 0.05, 18), 0.0)
+	_rig.set("_yaw_deg", 0.0)
+	await _frames(20)
+	var tree2 := animator.get("_tree") as AnimationTree
+	Input.action_press("move_right")
+	await _frames(45)
+	var side_speed := Vector2(_player.velocity.x, _player.velocity.z).length()
+	var bp: Vector2 = tree2.get("parameters/loco_%s/blend_position" % animator.current_animation())
+	Input.action_release("move_right")
+	_check("De lado usa animação lateral (%s, mistura %s)" % [animator.current_animation(), bp],
+		animator.current_animation() in [&"walk", &"run"] and bp.x > 0.7)
+	await _frames(30)
+	Input.action_press("move_back")
+	await _frames(45)
+	var back_speed := Vector2(_player.velocity.x, _player.velocity.z).length()
+	bp = tree2.get("parameters/loco_%s/blend_position" % animator.current_animation())
+	Input.action_release("move_back")
+	_check("De costas usa animação para trás (mistura %s)" % bp, bp.y < -0.7)
+	_check("De lado e de costas é mais lento (%.1f / %.1f m/s, frente 3.6)" % [side_speed, back_speed],
+		side_speed < 3.0 and back_speed < side_speed)
+	await _frames(30)
+
 	# --- Sem munição / recarregar
 	await _tap_action("attack")
 	await _frames(3)
@@ -406,9 +446,18 @@ func _run_weapons() -> void:
 	await _frames(4)
 	_check("Tiro gasta munição (%d)" % pistol.loaded, pistol.loaded == 14)
 	_check("Tiro acerta a placa (acertos: %d)" % board.hits, board.hits == 1)
+	var flash := animator.weapon_node(ItemData.Slot.SIDEARM).get_node_or_null("Flash")
+	_check("Clarão do disparo é reaproveitado (nó fixo na arma)", flash != null)
 	var impacts := world.find_children("*", "ImpactEffect", false, false).size()
 	_check("Marca de tiro aparece (%d)" % impacts, impacts >= 1)
 	await get_tree().create_timer(0.4).timeout
+
+	# --- Otimizações
+	var shirt := _player.get_node("Visual/Model").find_child("Shirt", true, false) as Node3D
+	var jacket_on := inv.equipped(ItemData.Slot.BODY) != null
+	_check("Camiseta só é desenhada sem jaqueta (jaqueta: %s, camiseta: %s)" % [jacket_on, shirt.visible],
+		shirt.visible != jacket_on)
+	_check("Árvores em MultiMesh (2 desenhos)", world.get_node("Trees").find_children("*", "MultiMeshInstance3D", false, false).size() == 2)
 
 	# --- Guardar
 	await _tap_action("weapon")

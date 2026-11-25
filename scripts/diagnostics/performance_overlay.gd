@@ -45,4 +45,4 @@ func _process(delta: float) -> void:
 
 func _refresh_buttons() -> void:
 	_quality_button.text = "Gráfico: %s" % GameSettings.QUALITY_NAMES[GameSettings.quality]
-	_fps_button.text = "Limite: %d FPS" % GameSettings.fps_limit
+	_fps_button.text = "Limite: %s" % GameSettings.fps_label()

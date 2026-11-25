@@ -5,11 +5,18 @@ extends Node
 enum Quality { LOW, MEDIUM, HIGH }
 
 const SETTINGS_PATH := "user://settings.cfg"
-const FPS_OPTIONS: Array[int] = [30, 45, 60]
+## 0 = Automático: tenta 60; se o aparelho não sustentar, trava em 30 (ritmo regular, sem trancos).
+const FPS_OPTIONS: Array[int] = [0, 30, 45, 60]
+const AUTO_WINDOW := 3.0
+const AUTO_MIN_FPS := 52.0
 const QUALITY_NAMES: Array[String] = ["Baixo", "Médio", "Alto"]
 
 var quality: int = Quality.MEDIUM
-var fps_limit: int = 60
+var fps_limit: int = 0
+## Limite efetivo escolhido pelo modo automático.
+var auto_fps := 60
+var _auto_time := 0.0
+var _auto_frames := 0
 var look_sensitivity: float = 1.0
 var haptics_enabled: bool = true
 
@@ -30,7 +37,8 @@ func cycle_quality() -> void:
 
 
 func set_fps_limit(fps: int) -> void:
-	fps_limit = fps if fps in FPS_OPTIONS else 60
+	fps_limit = fps if fps in FPS_OPTIONS else 0
+	auto_fps = 60
 	apply()
 	save()
 
@@ -40,8 +48,29 @@ func cycle_fps_limit() -> void:
 	set_fps_limit(FPS_OPTIONS[(i + 1) % FPS_OPTIONS.size()])
 
 
+func fps_label() -> String:
+	return "Auto (%d)" % auto_fps if fps_limit == 0 else "%d" % fps_limit
+
+
+## Modo automático: mede o FPS real em janelas de 3 s. Se não segurar ~60, fixa 30 —
+## 30 quadros regulares parecem mais lisos que 40 irregulares numa tela de 60 Hz.
+func _process(delta: float) -> void:
+	if fps_limit != 0 or auto_fps == 30:
+		return
+	_auto_time += delta
+	_auto_frames += 1
+	if _auto_time < AUTO_WINDOW:
+		return
+	var fps := _auto_frames / _auto_time
+	_auto_time = 0.0
+	_auto_frames = 0
+	if fps < AUTO_MIN_FPS:
+		auto_fps = 30
+		Engine.max_fps = 30
+
+
 func apply() -> void:
-	Engine.max_fps = fps_limit
+	Engine.max_fps = auto_fps if fps_limit == 0 else fps_limit
 	var viewport := get_viewport()
 	viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	viewport.msaa_3d = Viewport.MSAA_DISABLED
@@ -76,5 +105,7 @@ func _load() -> void:
 		return
 	quality = clampi(cfg.get_value("graphics", "quality", quality), Quality.LOW, Quality.HIGH)
 	fps_limit = cfg.get_value("graphics", "fps_limit", fps_limit)
+	if not fps_limit in FPS_OPTIONS:
+		fps_limit = 0
 	look_sensitivity = cfg.get_value("controls", "look_sensitivity", look_sensitivity)
 	haptics_enabled = cfg.get_value("controls", "haptics", haptics_enabled)

@@ -43,6 +43,18 @@ def basis(direction, ref):
     return Matrix((xv, yv, zv)).transposed().to_quaternion()
 
 
+def basis_z(z_dir, y_ref):
+    """Rotação cuja base tem Z = z_dir exato e Y = referência (ortogonalizada).
+    Usada nas mãos com arma: a direção da arma manda, a palma se ajusta."""
+    zv = z_dir.normalized()
+    yv = y_ref - zv * y_ref.dot(zv)
+    if yv.length < 1e-6:
+        yv = Y - zv * Y.dot(zv)
+    yv.normalize()
+    xv = yv.cross(zv)
+    return Matrix((xv, yv, zv)).transposed().to_quaternion()
+
+
 def two_bone(a, l1, l2, target, pole):
     """IK de dois ossos: retorna (posição do meio, alvo alcançável)."""
     d = target - a
@@ -66,6 +78,7 @@ class Rig:
         self.parent = {n: (bone.parent.name if bone.parent else None) for n, bone in b.items()}
         self.rest_head = {n: bone.head_local.copy() for n, bone in b.items()}
         self.rest_q = {n: bone.matrix_local.to_quaternion() for n, bone in b.items()}
+        self.rest_tail = {n: bone.tail_local.copy() for n, bone in b.items()}
 
         def depth(n):
             return 0 if self.parent[n] is None else 1 + depth(self.parent[n])
@@ -82,7 +95,19 @@ class Rig:
             fore = (wr - el).normalized()
             fore_o = (fore - thumb * fore.dot(thumb)).normalized()
             palm = wr + (h[f"finger3-1.{s}"] - wr) * 0.55
+            # eixo de dobra de cada dedo: em repouso os dedos já curvam levemente para a palma;
+            # essa curvatura revela de que lado fica a palma (sem depender da orientação dos ossos)
+            curl = {}
+            for f in range(1, 6):
+                j0 = 2 if f == 1 else 1
+                prox = (self.rest_tail[f"finger{f}-{j0}.{s}"] - h[f"finger{f}-{j0}.{s}"]).normalized()
+                dist = (self.rest_tail[f"finger{f}-3.{s}"] - h[f"finger{f}-3.{s}"]).normalized()
+                palm_dir = dist - prox * dist.dot(prox)
+                if palm_dir.length < 1e-4:
+                    palm_dir = (h[f"finger3-1.{s}"] - h[f"finger2-1.{s}"]).cross(prox)
+                curl[f] = prox.cross(palm_dir.normalized()).normalized()
             self.arm_rest[s] = {
+                "curl": curl,
                 "l1": (el - sh).length, "l2": (wr - el).length, "up": el - sh, "fore": wr - el,
                 "n": (el - sh).cross(wr - el), "thumb": thumb, "fwd": fore_o, "grip": palm - wr,
             }
@@ -172,7 +197,7 @@ class Rig:
         if pole is None:
             pole = chest @ Vector((s * 0.5, 0.8, -0.3))  # cotovelo para trás e um pouco para fora
         if fwd is not None:
-            hand_q = basis(fwd, thumb) @ basis(a["fwd"], a["thumb"]).inverted()
+            hand_q = basis_z(thumb, fwd) @ basis_z(a["thumb"], a["fwd"]).inverted()
             wrist_target = grip - hand_q @ a["grip"]
         else:
             hand_q = None
@@ -186,18 +211,32 @@ class Rig:
         fore_q = basis(wrist - elbow, n_new) @ basis(a["fore"], a["n"]).inverted()
         self.set(f"lowerarm01.{side}", fore_q)
         if hand_q is not None:
-            self.set(f"lowerarm02.{side}", fore_q.slerp(hand_q, 0.5))  # torção distribuída
+            # metade da torção da mão vai para o osso de torção do antebraço (só gira em volta do
+            # eixo do antebraço, sem dobrá-lo — assim o punho não sai do lugar)
+            r = fore_q.inverted() @ hand_q
+            axis = a["fore"].normalized()
+            proj = Vector((r.x, r.y, r.z)).dot(axis) * axis
+            twist = Quaternion((r.w, proj.x, proj.y, proj.z))
+            if twist.magnitude > 1e-6:
+                twist.normalize()
+                self.set(f"lowerarm02.{side}", fore_q @ Quaternion().slerp(twist, 0.5))
             self.set(f"wrist.{side}", hand_q)
         self.fingers(side, fist)
 
     def fingers(self, side, fist):
-        """0 = mão aberta relaxada, 1 = punho fechado."""
-        s = 1.0 if side == "L" else -1.0
+        """0 = mão aberta relaxada, 1 = punho fechado. A dobra é feita em torno do eixo calculado
+        a partir da curvatura natural dos dedos (sempre em direção à palma)."""
+        hand = self.world(f"wrist.{side}")
+        curl = self.arm_rest[side]["curl"]
         for f in range(2, 6):
+            total = 0.0
             for j in range(1, 4):
-                self.local_extra[f"finger{f}-{j}.{side}"] = q(X, (8 + 8 * j) + fist * (50 + 12 * j))
-        self.local_extra[f"finger1-2.{side}"] = q(Z, s * (10 + 30 * fist))
-        self.local_extra[f"finger1-3.{side}"] = q(X, 15 + 40 * fist)
+                total += (4 + 4 * j) + fist * (45 + 15 * j)
+                self.set(f"finger{f}-{j}.{side}", hand @ Quaternion(curl[f], math.radians(total)))
+        total = 0.0
+        for j, (relaxed, closed) in ((2, (6, 22)), (3, (8, 35))):
+            total += relaxed + fist * closed
+            self.set(f"finger1-{j}.{side}", hand @ Quaternion(curl[1], math.radians(total)))
 
     def shoulder_pos(self, side):
         return self.pos(f"upperarm01.{side}")
@@ -246,8 +285,10 @@ def finish(rig, act, cyclic=True):
 class Gait:
     """stride = (alcance à frente, alcance atrás) do pé durante o apoio, em metros."""
     def __init__(self, cycle, stride, duty, lift, width, drop, bob, bob_phase, lean, pelvis_yaw, pelvis_roll,
-                 sway, impact, arm_mode, arm_amp, heel=12.0, toe_off=25.0, knee_kick=0.0):
+                 sway, impact, arm_mode, arm_amp, heel=12.0, toe_off=25.0, knee_kick=0.0, direction=(0.0, 1.0)):
         self.reach_f, self.reach_b = stride
+        # direção do movimento no referencial do corpo: x = direita, y = frente
+        self.dir_x, self.dir_y = direction
         self.cycle, self.stride, self.duty, self.lift, self.width = cycle, sum(stride), duty, lift, width
         self.drop, self.bob, self.bob_phase, self.lean = drop, bob, bob_phase, lean
         self.pelvis_yaw, self.pelvis_roll, self.sway, self.impact = pelvis_yaw, pelvis_roll, sway, impact
@@ -295,9 +336,24 @@ def locomotion(rig, name, g):
                    yaw=-g.pelvis_yaw * s, roll=g.pelvis_roll * math.sin(2 * math.pi * p + 0.6))
         rig.torso(lean=g.lean + g.impact * 4 * imp, yaw=g.pelvis_yaw * 1.4 * s, roll=-g.pelvis_roll * 0.4 * s)
         rig.head(pitch=-g.lean * 0.55 + g.impact * 2.0 * imp, yaw=-g.pelvis_yaw * 0.2 * s)
+        # direção do passo no mundo da armadura (frente = -Y, direita = -X)
+        move = Vector((-g.dir_x, -g.dir_y, 0.0))
+        targets = {}
         for side, off, x in (("R", 0.0, -g.width), ("L", 0.5, g.width)):
             fwd, lift, pitch = foot_track(g, (p + off) % 1.0)
-            rig.foot(side, Vector((x, -fwd, rig.ground_ankle + lift)), pitch, yaw=-g.pelvis_yaw * 0.3 * s)
+            if g.dir_y < -0.5:
+                pitch = -pitch * 0.5  # andando de costas: apoia a ponta primeiro
+            elif abs(g.dir_x) > 0.5:
+                pitch *= 0.3          # de lado: pé mais plano
+            targets[side] = [Vector((x, 0.0, rig.ground_ankle + lift)) + move * fwd, pitch]
+        # de lado as pernas nunca se cruzam: mantém o pé esquerdo sempre à esquerda do direito
+        gap = targets["L"][0].x - targets["R"][0].x
+        if gap < 0.12:
+            push = (0.12 - gap) * 0.5
+            targets["L"][0].x += push
+            targets["R"][0].x -= push
+        for side in ("R", "L"):
+            rig.foot(side, targets[side][0], targets[side][1], yaw=-g.pelvis_yaw * 0.3 * s)
         for side, sign in (("L", 1.0), ("R", -1.0)):
             arm_cycle(rig, side, g, sign * s, imp)
         rig.shoulders(raise_l=1.5 * imp * g.impact, raise_r=1.5 * imp * g.impact, fwd_l=3 * s, fwd_r=-3 * s)
@@ -432,13 +488,27 @@ def stand_base(rig, lean=3.0, yaw=0.0, width=0.14, stagger=0.12):
 
 
 def melee_grip(rig, grip_r, weapon_dir, palm_fwd):
-    """Mão direita segura a arma; a esquerda segura logo abaixo no cabo (duas mãos)."""
+    """Duas mãos no cabo: direita em cima, esquerda 10 cm abaixo (perto do pomo)."""
     w = weapon_dir.normalized()
     rig.hand("R", grip_r, fwd=palm_fwd, thumb=w, fist=1.0)
-    rig.hand("L", grip_r - w * 0.09, fwd=palm_fwd, thumb=w, fist=1.0)
+    rig.hand("L", grip_r - w * 0.1, fwd=palm_fwd, thumb=w, fist=1.0)
 
 
-MELEE_REST = (Vector((-0.02, -0.22, -0.42)), Vector((0.35, -0.35, 0.85)))
+def chest_center(rig):
+    return (rig.shoulder_pos("L") + rig.shoulder_pos("R")) * 0.5
+
+
+# mãos na frente do corpo, taco apoiado sobre o ombro direito (referencial do peito: x esq, y trás, z cima)
+MELEE_REST = (Vector((0.0, -0.27, -0.34)), Vector((-0.35, 0.3, 0.88)))
+PALM_FWD = Vector((0.0, -1.0, -0.4))
+
+
+def _melee_frame(rig, local, wdir, yaw=0.0, lean=3.0):
+    rig.begin()
+    stand_base(rig, lean=lean, yaw=yaw)
+    rig.head(pitch=3, yaw=-yaw * 0.6)
+    grip = chest_center(rig) + rig.chest_vec(local)
+    melee_grip(rig, grip, rig.chest_vec(wdir), rig.chest_vec(PALM_FWD))
 
 
 def hold_melee(rig):
@@ -446,33 +516,25 @@ def hold_melee(rig):
     act = new_action(rig, "hold_melee", frames)
     for f in range(0, frames + 1, 6):
         b = math.sin(2 * math.pi * f / frames)
-        rig.begin()
-        stand_base(rig)
-        rig.head(pitch=2)
         local, wdir = MELEE_REST
-        grip = rig.shoulder_pos("R") + rig.chest_vec(local + Vector((0, 0, 0.005 * b)))
-        melee_grip(rig, grip, rig.chest_vec(wdir), rig.chest_vec(Vector((0.0, -0.3, -1.0))))
+        _melee_frame(rig, local + Vector((0, 0, 0.006 * b)), wdir)
         rig.key(f)
     finish(rig, act)
 
 
 def attack_melee(rig):
-    """Golpe com as duas mãos: prepara sobre o ombro direito, gira o quadril e atravessa."""
+    """Golpe com as duas mãos: leva o taco para trás do ombro, gira o quadril e atravessa na frente."""
     act = new_action(rig, "attack_melee", 24)
-    keys = [  # quadro, giro do tronco, inclinação, mão (referencial do peito), direção da arma
+    keys = [  # quadro, giro do tronco, inclinação, mãos (peito), direção da arma
         (0, 0, 3) + MELEE_REST,
-        (7, 42, -3, Vector((-0.22, 0.06, 0.1)), Vector((0.05, 0.8, 0.55))),
-        (10, 30, 2, Vector((-0.2, -0.08, 0.0)), Vector((-0.35, 0.1, 1.0))),
-        (13, -15, 10, Vector((0.0, -0.5, -0.2)), Vector((0.9, -0.45, 0.05))),
-        (16, -45, 12, Vector((0.25, -0.3, -0.38)), Vector((0.9, 0.2, -0.35))),
+        (7, 40, -2, Vector((-0.16, -0.12, -0.18)), Vector((-0.25, 0.75, 0.6))),
+        (10, 25, 3, Vector((-0.12, -0.28, -0.26)), Vector((-0.75, -0.1, 0.65))),
+        (13, -15, 10, Vector((0.0, -0.42, -0.3)), Vector((0.75, -0.65, 0.05))),
+        (16, -40, 12, Vector((0.12, -0.3, -0.38)), Vector((0.9, 0.3, -0.25))),
         (24, 0, 3) + MELEE_REST,
     ]
     for f, yaw, lean, local, wdir in keys:
-        rig.begin()
-        stand_base(rig, lean=lean, yaw=yaw)
-        rig.head(pitch=3, yaw=-yaw * 0.6)
-        grip = rig.shoulder_pos("R") + rig.chest_vec(local)
-        melee_grip(rig, grip, rig.chest_vec(wdir), rig.chest_vec(Vector((0.0, -0.3, -1.0))))
+        _melee_frame(rig, local, wdir, yaw, lean)
         rig.key(f)
     finish(rig, act, cyclic=False)
 
@@ -531,6 +593,17 @@ def create_all(arm):
                                 "run", 1.0, heel=6, toe_off=30, knee_kick=0.1))
     locomotion(rig, "sprint", Gait(0.6, (0.32, 0.72), 0.3, 0.45, 0.05, 0.095, 0.045, 0.0, 16, 10, 4, 0.008, 1.2,
                                    "run", 1.35, heel=2, toe_off=35, knee_kick=0.15))
+    # direcionais (usados com arma em mãos, corpo virado para a câmera)
+    #                         ciclo  passada      apoio elev. larg. queda bob  fase  incl. q.yaw q.roll sway imp.
+    for name, d in (("left", (-1.0, 0.0)), ("right", (1.0, 0.0))):
+        locomotion(rig, f"walk_{name}", Gait(0.9, (0.25, 0.25), 0.55, 0.08, 0.15, 0.04, 0.012, math.pi, 3, 2, 4,
+                                            0.015, 0.3, "walk", 8, heel=4, toe_off=10, direction=d))
+        locomotion(rig, f"run_{name}", Gait(0.7, (0.35, 0.35), 0.4, 0.2, 0.15, 0.08, 0.03, 0.0, 7, 3, 5,
+                                           0.01, 0.8, "run", 0.6, heel=2, toe_off=15, direction=d))
+    locomotion(rig, "walk_back", Gait(1.1, (0.35, 0.35), 0.62, 0.09, 0.1, 0.04, 0.015, math.pi, -2, 4, 3, 0.02, 0.3,
+                                      "walk", 12, heel=8, toe_off=12, direction=(0.0, -1.0)))
+    locomotion(rig, "run_back", Gait(0.7, (0.3, 0.3), 0.4, 0.2, 0.08, 0.07, 0.03, 0.0, 2, 5, 3, 0.012, 0.7,
+                                     "run", 0.7, heel=4, toe_off=15, direction=(0.0, -1.0)))
     crouch_idle(rig)
     locomotion(rig, "crouch_walk", Gait(1.2, (0.35, 0.35), 0.66, 0.08, 0.13, 0.42, 0.012, math.pi, 26, 6, 3, 0.02, 0.2,
                                         "walk", 14, heel=8, toe_off=15))

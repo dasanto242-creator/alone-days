@@ -5,6 +5,9 @@ extends Area3D
 
 const PICKUP_SCENE := "res://scenes/world/item_pickup.tscn"
 
+## Um material por cor, compartilhado por todos os itens (evita criar recursos e trocar estado na GPU).
+static var _materials := {}
+
 @export var item_id: StringName
 @export var quantity := 1
 @export_range(0.0, 100.0) var durability := 100.0
@@ -94,12 +97,16 @@ func _build_visual(d: ItemData) -> void:
 			var b := BoxMesh.new()
 			b.size = size
 			mesh = b
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = d.world_color
-	mat.roughness = 0.7
-	mat.emission_enabled = true
-	mat.emission = d.world_color
-	mat.emission_energy_multiplier = 0.12
+	var key := d.world_color.to_html()
+	if not _materials.has(key):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = d.world_color
+		m.roughness = 0.7
+		m.emission_enabled = true
+		m.emission = d.world_color
+		m.emission_energy_multiplier = 0.12
+		_materials[key] = m
+	var mat: StandardMaterial3D = _materials[key]
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat

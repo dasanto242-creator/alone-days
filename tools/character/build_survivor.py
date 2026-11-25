@@ -490,9 +490,10 @@ SOCKET_BONES = {"Socket_Hand_R": "wrist.R", "Socket_Back": "spine02", "Socket_Ba
 
 
 def _frame(pos, fwd, up):
-    """Matriz com +Y = frente da arma e +Z = eixo do polegar/cabo."""
-    y = fwd.normalized()
-    z = (up - y * up.dot(y)).normalized()
+    """Matriz com +Z = eixo do polegar/cabo (exato) e +Y = frente da arma (ortogonalizada).
+    Mesma convenção das animações (survivor_anims.basis_z): a direção da arma manda."""
+    z = up.normalized()
+    y = (fwd - z * fwd.dot(z)).normalized()
     x = y.cross(z)
     m = Matrix((x, y, z)).transposed().to_4x4()
     m.translation = pos

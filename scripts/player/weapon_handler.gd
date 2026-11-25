@@ -61,7 +61,7 @@ func cycle_weapon() -> void:
 
 func set_wielded(slot: int) -> void:
 	wielded_slot = slot
-	_player.face_camera = (slot == ItemData.Slot.SIDEARM)
+	_player.face_camera = slot != -1  # postura de combate: corpo acompanha a câmera
 	_player.animator().set_wielded(slot, _player.inventory)
 	_emit_state()
 

@@ -32,7 +32,7 @@
 | 2.7 | Tela de inventário por toque com ações contextuais (Comer, Beber, Usar, Equipar, Largar) | ✅ Concluído (testado) |
 | 2.8 | HUD discreta (vida, fome, sede, stamina), avisos na tela, tela de morte | ✅ Concluído |
 
-**Testes automáticos:** `tools/smoke_test.tscn` — 81 verificações, 81 aprovadas (rodam também no GitHub a cada build).
+**Testes automáticos:** `tools/smoke_test.tscn` — 89 verificações, 89 aprovadas (rodam também no GitHub a cada build).
 
 ## Com problemas / limitações conhecidas
 - Rosto ainda sem textura fotográfica (pele procedural); cabelo raspado pintado sob o gorro.
@@ -51,6 +51,17 @@
 | Alvos de treino: placa de tiro e boneco de pancada | ✅ |
 | Dano em infectados | ⏳ Etapa 3 (as armas já usam `apply_damage`) |
 | Sons de disparo/golpe | ⏳ Etapa 5 |
+
+## Ajustes de 25/11
+- Casa: a porta abria para fora e a colisão dela não acompanhava o giro — corrigido (entra andando).
+- Personagem sobe degraus de até 30 cm sozinho (calçadas, soleiras); calçadas adicionadas na estrada.
+- Animações direcionais: andar/correr de lado e de costas (com arma em mãos o corpo encara a câmera;
+  de lado é 72% e de costas ~60% da velocidade). No sprint a arma abaixa e o corpo vira para onde corre.
+- Empunhadura da arma branca: duas mãos no cabo com punhos fechados (direção da arma prioritária,
+  torção do antebraço sem deslocar o punho, dedos dobrando para a palma).
+- Otimização: FPS automático (60 se o aparelho sustenta, senão 30 com ritmo regular), árvores em
+  MultiMesh, materiais compartilhados, clarão/marcas de tiro reaproveitados, sombras desligadas em
+  peças pequenas, camiseta não é desenhada sob a jaqueta.
 
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).

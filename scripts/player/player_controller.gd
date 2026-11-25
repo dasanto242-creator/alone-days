@@ -68,6 +68,11 @@ var held: ItemStack = null
 var _pending_hold := false
 var _step_distance := 0.0
 var _air_time := 0.0
+## Pulo parado: o impulso sai depois da preparação (agachar antes de pular).
+var _jump_timer := -1.0
+var _air_peak_y := 0.0
+## Altura (m) a partir da qual a queda machuca.
+@export var fall_damage_height := 3.2
 
 
 func _ready() -> void:
@@ -88,15 +93,20 @@ func _physics_process(delta: float) -> void:
 		_busy = maxf(_busy - delta, 0.0)
 		if not parkour.is_active():
 			_busy = 0.0
+			_air_time = 0.0
 			_finish_action()
 		_animator.update_pose(0.0, sprint_speed, true, false, delta)
 		return
 	_update_busy(delta)
-	if _busy <= 0.0:
+	if _jump_timer >= 0.0:
+		_jump_timer -= delta
+		if _jump_timer < 0.0 and is_on_floor():
+			velocity.y = jump_velocity
+	if _busy <= 0.0 and _jump_timer < 0.0:
 		_handle_actions()
 
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back", 0.05)
-	if _busy > 0.0 or stats.is_dead:
+	if _busy > 0.0 or stats.is_dead or _jump_timer >= 0.0:
 		input = Vector2.ZERO
 	var strength := minf(input.length(), 1.0)
 	var yaw := _camera_rig.get_yaw() if _camera_rig else 0.0
@@ -147,7 +157,8 @@ func _physics_process(delta: float) -> void:
 	stats.tick(delta, _exertion(ground_speed))
 	_emit_step_noise(delta, ground_speed)
 	_footsteps(delta, ground_speed)
-	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta, _local_move_dir())
+	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta, _local_move_dir(),
+		_aiming())
 	_update_interaction_focus()
 
 
@@ -295,10 +306,13 @@ func store_held() -> bool:
 ## Passos: um som a cada passada, de acordo com o piso (grama ou piso duro).
 func _footsteps(delta: float, ground_speed: float) -> void:
 	if not is_on_floor():
+		if _air_time == 0.0:
+			_air_peak_y = global_position.y
+		_air_peak_y = maxf(_air_peak_y, global_position.y)
 		_air_time += delta
 		return
-	if _air_time > 0.35:
-		Sfx.play_3d(&"land", global_position, -2.0 if _air_time < 0.8 else 2.0)
+	if _air_time > 0.2:
+		_on_landed(_air_peak_y - global_position.y)
 		_step_distance = 0.0
 	_air_time = 0.0
 	if ground_speed < 0.3:
@@ -315,6 +329,26 @@ func _footsteps(delta: float, ground_speed: float) -> void:
 		surface = &"step_hard"
 	var vol := -12.0 if is_crouching else (-4.0 if ground_speed < 2.4 else 0.0)
 	Sfx.play_3d(surface, global_position, vol)
+
+
+## Volta ao chão: a altura da queda decide a aterrissagem (leve, pesada) e o dano.
+func _on_landed(drop: float) -> void:
+	if drop < 0.25:
+		return
+	var hard := drop > 2.2
+	_animator.play_land(hard)
+	Sfx.play_3d(&"land", global_position, 2.0 if hard else -3.0)
+	if hard:
+		_busy = maxf(_busy, 0.55)  # leva um tempo para se recuperar
+		velocity.x *= 0.2
+		velocity.z *= 0.2
+		GameSettings.vibrate(60, 0.8)
+	if drop > fall_damage_height:
+		var dmg := (drop - fall_damage_height) * 18.0
+		stats.apply_damage(dmg)
+		Events.player_damaged.emit(dmg)
+		Sfx.play_3d(&"player_hurt", global_position + Vector3.UP * 1.2)
+		Events.notify.emit("Queda feia")
 
 
 ## Postura de combate: arma em mãos e sem estar em sprint (no sprint a arma abaixa e o corpo
@@ -400,7 +434,15 @@ func _handle_actions() -> void:
 			_set_crouching(false)
 		elif stats.can_jump():
 			stats.spend_stamina(stats.jump_cost)
-			velocity.y = jump_velocity
+			var speed := Vector2(velocity.x, velocity.z).length()
+			if speed > 2.2:
+				# correndo: impulso na hora, numa perna só, levando o embalo para frente
+				velocity.y = jump_velocity * 0.92
+				_animator.start_jump(true)
+			else:
+				# parado/andando: agacha um instante e então pula
+				_jump_timer = 0.13
+				_animator.start_jump(false, 0.13)
 		else:
 			Events.notify.emit("Sem fôlego")
 	if held != null:
@@ -423,6 +465,9 @@ func _target_speed(strength: float) -> float:
 		return crouch_speed * clampf(strength / jog_threshold, 0.4, 1.0)
 	if is_sprinting:
 		return sprint_speed
+	if _aiming():
+		# mirando: passos mais curtos e cuidadosos; o "trote" fica contido
+		return walk_speed * 0.8 if strength < jog_threshold else jog_speed * 0.72
 	return walk_speed if strength < jog_threshold else jog_speed
 
 

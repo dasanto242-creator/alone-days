@@ -14,37 +14,37 @@ height = 1.8
 [sub_resource type="SphereShape3D" id="SphereShape3D_gx1jg"]
 radius = 1.1
 
-[node name="Player" type="CharacterBody3D" unique_id=67840238]
+[node name="Player" type="CharacterBody3D" unique_id=930593189]
 collision_layer = 2
 collision_mask = 17
 floor_max_angle = 0.80285144
 floor_snap_length = 0.35
 script = ExtResource("1_75vfm")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=749867651]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=291331467]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_fm80t")
 
-[node name="Survival" type="Node" parent="." unique_id=1446699218]
+[node name="Survival" type="Node" parent="." unique_id=2042492313]
 script = ExtResource("2_0owmy")
 
-[node name="Weapons" type="Node" parent="." unique_id=269202082]
+[node name="Weapons" type="Node" parent="." unique_id=1310129904]
 script = ExtResource("3_qek5x")
 
-[node name="Parkour" type="Node" parent="." unique_id=743316927]
+[node name="Parkour" type="Node" parent="." unique_id=1261959373]
 script = ExtResource("4_5gtgg")
 
-[node name="Visual" type="Node3D" parent="." unique_id=1188386414]
+[node name="Visual" type="Node3D" parent="." unique_id=836778200]
 script = ExtResource("5_h17s1")
 
-[node name="Model" parent="Visual" unique_id=1926913141 instance=ExtResource("6_je7p5")]
+[node name="Model" parent="Visual" unique_id=673598025 instance=ExtResource("6_je7p5")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="InteractionArea" type="Area3D" parent="Visual" unique_id=1719255973]
+[node name="InteractionArea" type="Area3D" parent="Visual" unique_id=27737630]
 collision_layer = 0
 collision_mask = 4
 monitorable = false
 
-[node name="Shape" type="CollisionShape3D" parent="Visual/InteractionArea" unique_id=2060303499]
+[node name="Shape" type="CollisionShape3D" parent="Visual/InteractionArea" unique_id=1321959142]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -0.7)
 shape = SubResource("SphereShape3D_gx1jg")

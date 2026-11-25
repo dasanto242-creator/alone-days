@@ -101,6 +101,26 @@
   ataque, dor e morte do zumbi, dor e esforço do jogador, aterrissagem, comer, beber, pegar,
   mochila, porta e vento ambiente em loop. Gerador: `tools/audio/make_sounds.py`.
 
+## Ajustes de 25/11 (4) — movimentação realista
+- Comer/beber: o braço agora sobe por fora com o cotovelo para baixo (não cruza mais o corpo) e o
+  gargalo/alimento aponta para a boca; segurar item usa a mesma pose natural.
+- Agachado em todas as direções (frente, trás, lados) com mistura suave e pés sem deslizar.
+- Andar mirando (arma em mãos): joelhos dobrados, passos curtos e "rolados", quase sem sobe-e-desce,
+  20% mais lento; trotar mirando é contido. Atirar andando/correndo/pulando é menos preciso e a mira
+  abre na tela; parado e agachado é o mais firme.
+- Pulo: parado agacha antes do impulso; correndo impulsiona numa perna só; no ar, queda longa usa
+  pose de queda (braços abertos); aterrissagem leve dobra os joelhos; acima de 2,2 m é pesada
+  (agacha e apoia a mão, perde o embalo); acima de 3,2 m machuca.
+- Corpo inclina para dentro das curvas e para frente/trás ao acelerar e frear.
+- Escaladas por altura (Pular de frente):
+  - 0,4–1,3 m fino: salto apoiando a mão;
+  - 0,5–1,0 m largo: sobe apoiando as mãos e um pé;
+  - 1,0–1,7 m: agarra a borda, empurra e sobe o joelho;
+  - 1,7–2,5 m: pula, agarra com os braços esticados, fica pendurado se esforçando (pés raspando
+    na parede, ombros tremendo), puxa, passa os cotovelos, engancha a perna e sobe — 2,6 s e 30 de
+    fôlego (sem fôlego não sobe).
+- Área de treino no cenário: bloco de 0,8 m e muro de 2,2 m perto da plataforma.
+
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).
 - ~22 mil triângulos, 67 ossos, texturas próprias comprimidas para celular.

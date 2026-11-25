@@ -7,23 +7,36 @@ extends Node3D
 ##      A velocidade de reprodução acompanha a velocidade real (pés não deslizam).
 ##   2. Segurar arma (só tronco e braços): hold_melee / hold_pistol.
 ##   3. Ação (one-shot, tronco e braços): golpe, disparo, recarga.
-##   4. Uso (one-shot, corpo inteiro): beber, comer, pegar do chão.
+##   4. Aterrissagem (one-shot curto, corpo inteiro): leve ou pesada, conforme a altura da queda.
+##   5. Uso (one-shot, corpo inteiro): beber, comer, pegar do chão, pular obstáculo, escalar.
+## Por cima de tudo, uma inclinação procedural do corpo: tomba para dentro das curvas e para
+## frente/trás ao acelerar e frear (como uma pessoa de verdade compensando o peso).
 
 ## Velocidade no chão (m/s) de cada ciclo: distância do pé no apoio / tempo de apoio.
 const NOMINAL_SPEED := {&"walk": 1.3, &"run": 3.57, &"sprint": 5.78, &"crouch_walk": 0.88}
 ## Velocidade nominal por direção (frente, trás, lado) dos ciclos direcionais.
-const DIRECTIONAL_SPEED := {&"walk": Vector3(1.3, 1.03, 1.01), &"run": Vector3(3.57, 2.14, 2.5)}
+const DIRECTIONAL_SPEED := {&"walk": Vector3(1.3, 1.03, 1.01), &"run": Vector3(3.57, 2.14, 2.5),
+	&"crouch_walk": Vector3(0.88, 0.68, 0.67), &"walk_aim": Vector3(1.03, 0.86, 0.84)}
 ## Espaços de mistura 2D: x = direita, y = frente.
 const BLEND_SPACES := {
 	&"walk": {&"walk": Vector2(0, 1), &"walk_back": Vector2(0, -1), &"walk_left": Vector2(-1, 0), &"walk_right": Vector2(1, 0)},
 	&"run": {&"run": Vector2(0, 1), &"run_back": Vector2(0, -1), &"run_left": Vector2(-1, 0), &"run_right": Vector2(1, 0)},
+	&"crouch_walk": {&"crouch_walk": Vector2(0, 1), &"crouch_walk_back": Vector2(0, -1),
+		&"crouch_walk_left": Vector2(-1, 0), &"crouch_walk_right": Vector2(1, 0)},
+	&"walk_aim": {&"walk_aim": Vector2(0, 1), &"walk_aim_back": Vector2(0, -1), &"walk_aim_left": Vector2(-1, 0),
+		&"walk_aim_right": Vector2(1, 0)},
 }
-const LOCO: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk", &"jump", &"death"]
+const LOCO: Array[StringName] = [&"idle", &"walk", &"walk_aim", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
+	&"jump", &"jump_run", &"fall", &"death"]
 const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
-	&"hold_melee", &"hold_pistol", &"hold_item", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left", &"run_right"]
+	&"hold_melee", &"hold_pistol", &"hold_item", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left",
+	&"run_right", &"crouch_walk_back", &"crouch_walk_left", &"crouch_walk_right", &"walk_aim", &"walk_aim_back",
+	&"walk_aim_left", &"walk_aim_right", &"fall"]
+const LANDS: Array[StringName] = [&"land", &"land_hard"]
+const AIR: Array[StringName] = [&"jump", &"jump_run", &"fall"]
 const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol", &"hold_item"]
 const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol"]
-const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb"]
+const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb", &"mantle_low", &"climb_high"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
 	"lowerarm", "wrist", "finger"]
 const ACTION_BONES := ["spine04", "spine03"]
@@ -52,10 +65,18 @@ var _prop: Node3D
 var _prop_show_at := -1.0
 var _prop_hide_at := -1.0
 var _use_time := 0.0
+var _jump_anim: StringName = &""     # pulo iniciado pelo jogador ("" = caiu de algum lugar)
+var _model_basis := Basis()
+var _jump_since := 0.0
+var _lean_roll := 0.0
+var _lean_pitch := 0.0
+var _last_yaw := 0.0
+var _last_speed := 0.0
 
 
 func _ready() -> void:
 	_model = get_node(model_path)
+	_model_basis = _model.basis
 	_anim = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	_jacket = _model.find_child("Jacket", true, false) as Node3D
 	_backpack = _model.find_child("Backpack", true, false) as Node3D
@@ -95,20 +116,27 @@ func _process(delta: float) -> void:
 
 
 ## move_dir: direção do movimento em relação ao corpo (x = direita, y = frente).
+## aiming: arma em posição (andar mirando, mais baixo e cuidadoso).
 func update_pose(ground_speed: float, _max_speed: float, grounded: bool, crouching: bool, delta: float,
-		move_dir := Vector2(0, 1)) -> void:
+		move_dir := Vector2(0, 1), aiming := false) -> void:
 	if _dead:
 		return
 	_airborne_time = 0.0 if grounded else _airborne_time + delta
+	_jump_since += delta
+	# pulo do jogador termina quando volta ao chão (depois da preparação)
+	if _jump_anim != &"" and grounded and _jump_since > _jump_wait + 0.2:
+		_jump_anim = &""
 	var target: StringName
-	if _airborne_time > 0.12:
-		target = &"jump"
+	if _jump_anim != &"":
+		target = &"fall" if _airborne_time > 0.75 else _jump_anim
+	elif _airborne_time > 0.25:
+		target = &"fall"     # saiu de uma beirada sem pular
 	elif crouching:
 		target = &"crouch_walk" if ground_speed > 0.2 else &"crouch_idle"
 	elif ground_speed < 0.2:
 		target = &"idle"
 	elif ground_speed < 2.4:
-		target = &"walk"
+		target = &"walk_aim" if aiming else &"walk"
 	elif ground_speed < 4.7:
 		target = &"run"
 	else:
@@ -130,6 +158,49 @@ func update_pose(ground_speed: float, _max_speed: float, grounded: bool, crouchi
 	# correndo muito rápido a arma fica mais "solta" (braços acompanham a corrida)
 	if _wielded >= 0:
 		_hold_target = 0.55 if target == &"sprint" else 1.0
+	_update_lean(ground_speed if grounded else 0.0, delta)
+
+
+var _jump_wait := 0.0
+
+
+## Começa a animação de pulo (parado: com preparação; correndo: impulso numa perna só).
+func start_jump(running: bool, anticipation := 0.0) -> void:
+	_jump_anim = &"jump_run" if running else &"jump"
+	_jump_wait = anticipation
+	_jump_since = 0.0
+	_current = &""
+	_set_loco(_jump_anim, true)
+	_tree.set("parameters/loco_speed/scale", 1.0)
+
+
+## Aterrissagem: leve (joelhos absorvem) ou pesada (agacha fundo e apoia a mão no chão).
+func play_land(hard: bool) -> void:
+	if _dead:
+		return
+	_jump_anim = &""
+	_tree.set("parameters/land_kind/transition_request", "land_hard" if hard else "land")
+	_tree.set("parameters/land/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
+
+## Inclinação procedural: tomba para o lado de dentro da curva e para frente ao acelerar
+## (para trás ao frear). Mais forte quanto maior a velocidade.
+func _update_lean(speed: float, delta: float) -> void:
+	if delta <= 0.0:
+		return
+	var yaw := global_rotation.y
+	var yaw_rate := wrapf(yaw - _last_yaw, -PI, PI) / delta
+	_last_yaw = yaw
+	var accel := (speed - _last_speed) / delta
+	_last_speed = speed
+	var target_roll := clampf(yaw_rate * speed * 0.035, -0.22, 0.22)
+	var target_pitch := clampf(-accel * 0.018, -0.12, 0.12)
+	if _current in [&"crouch_walk", &"crouch_idle"]:
+		target_roll *= 0.5
+	_lean_roll = lerpf(_lean_roll, target_roll, 1.0 - exp(-6.0 * delta))
+	_lean_pitch = lerpf(_lean_pitch, target_pitch, 1.0 - exp(-5.0 * delta))
+	# inclinação aplicada no modelo, girando em volta dos pés (origem do Visual)
+	_model.basis = Basis(Vector3(0, 0, 1), _lean_roll) * Basis(Vector3(1, 0, 0), _lean_pitch) * _model_basis
 
 
 ## Mostra no corpo o que está equipado (mochila, jaqueta, armas guardadas).
@@ -291,6 +362,8 @@ func _attach_flash(weapon: Node3D) -> void:
 func play_death() -> void:
 	_dead = true
 	_hold_target = 0.0
+	if _model:
+		_model.basis = _model_basis
 	_tree.set("parameters/use/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	_tree.set("parameters/loco_speed/scale", 1.0)
 	_set_loco(&"death")
@@ -306,8 +379,8 @@ func weapon_node(slot: int) -> Node3D:
 
 # ---------------------------------------------------------------- interno
 
-func _set_loco(anim_name: StringName) -> void:
-	if anim_name == _current:
+func _set_loco(anim_name: StringName, force := false) -> void:
+	if anim_name == _current and not force:
 		return
 	_current = anim_name
 	_tree.set("parameters/loco/transition_request", String(anim_name))
@@ -369,12 +442,19 @@ func _build_tree() -> void:
 	bt.add_node("action", action)
 	bt.connect_node("action", 0, "hold")
 	bt.connect_node("action", 1, "action_kind")
+	_transition(bt, "land_kind", LANDS, 0.0)
+	var land := AnimationNodeOneShot.new()
+	land.fadein_time = 0.04
+	land.fadeout_time = 0.15
+	bt.add_node("land", land)
+	bt.connect_node("land", 0, "action")
+	bt.connect_node("land", 1, "land_kind")
 	_transition(bt, "use_kind", USES, 0.0)
 	var use := AnimationNodeOneShot.new()
 	use.fadein_time = 0.2
 	use.fadeout_time = 0.3
 	bt.add_node("use", use)
-	bt.connect_node("use", 0, "action")
+	bt.connect_node("use", 0, "land")
 	bt.connect_node("use", 1, "use_kind")
 	bt.connect_node("output", 0, "use")
 	_tree = AnimationTree.new()
@@ -391,6 +471,7 @@ func _build_tree() -> void:
 func _transition(bt: AnimationNodeBlendTree, node_name: String, anims: Array[StringName], xfade: float) -> AnimationNodeTransition:
 	var t := AnimationNodeTransition.new()
 	t.xfade_time = xfade
+	t.allow_transition_to_self = node_name == "loco"
 	for anim_name in anims:
 		t.add_input(String(anim_name))
 	bt.add_node(node_name, t)

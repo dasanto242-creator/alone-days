@@ -5,7 +5,10 @@ extends Node
 ## Ao tocar em Pular de frente para um obstáculo:
 ##   - muro baixo e fino (0,4–1,3 m de altura, até 0,8 m de espessura, chão livre do outro lado)
 ##     -> SALTO (vault): apoia a mão e passa as pernas de lado;
-##   - borda mais alta ou bloco largo (0,9–2,1 m) com espaço em cima -> ESCALADA (climb).
+##   - bloco largo baixo (0,5–1,0 m: caixas, capô) -> SUBIR apoiando as mãos (mantle_low);
+##   - borda média (1,0–1,7 m) -> ESCALADA: agarra, empurra e sobe o joelho (climb);
+##   - parede alta (1,7–2,5 m) -> pula até alcançar a borda com os braços esticados, fica
+##     pendurado se esforçando, puxa o corpo e sobe devagar (climb_high). Gasta bastante fôlego.
 ## Durante o movimento o corpo segue a mesma trajetória usada para criar as animações
 ## (tools/character/survivor_anims.py: VAULT_PATH / CLIMB_PATH), ajustada à altura,
 ## distância e espessura reais do obstáculo, então mãos e pés caem no lugar certo.
@@ -20,16 +23,29 @@ const CLIMB_PATH := [[0, 0.0, 0.0], [5, 0.08, 0.0], [9, 0.2, 0.25], [16, 0.25, 0
 	[30, 0.6, 1.45], [37, 0.85, 1.5], [44, 0.9, 1.5]]
 const CLIMB_H := 1.5
 const CLIMB_FACE := 0.45
+const MANTLE_PATH := [[0, 0.0, 0.0], [5, 0.15, 0.0], [10, 0.3, 0.35], [16, 0.42, 0.72], [22, 0.62, 0.9],
+	[28, 0.72, 0.9]]
+const MANTLE_H := 0.9
+const MANTLE_FACE := 0.4
+const CLIMB_HIGH_PATH := [[0, 0.0, 0.0], [6, 0.1, 0.0], [11, 0.3, 0.55], [16, 0.32, 0.22], [24, 0.33, 0.3],
+	[32, 0.33, 0.24], [42, 0.35, 0.85], [50, 0.38, 1.3], [58, 0.5, 1.75], [68, 0.78, 2.2], [78, 0.9, 2.2]]
+const CLIMB_HIGH_H := 2.2
+const CLIMB_HIGH_FACE := 0.45
 
 const WORLD_MASK := 1
 const MAX_REACH := 1.1        ## distância máxima até a face do obstáculo
 const VAULT_MIN := 0.4
 const VAULT_MAX := 1.3
 const VAULT_MAX_THICK := 0.8
-const CLIMB_MIN := 0.9
-const CLIMB_MAX := 2.1
+const MANTLE_MIN := 0.5
+const CLIMB_MIN := 1.0
+const CLIMB_HIGH_MIN := 1.7
+const CLIMB_MAX := 2.5
 
-enum Kind { NONE, VAULT, CLIMB }
+enum Kind { NONE, VAULT, CLIMB, MANTLE, CLIMB_HIGH }
+## Fôlego gasto em cada movimento.
+const STAMINA_COST := {Kind.VAULT: 8.0, Kind.MANTLE: 6.0, Kind.CLIMB: 14.0, Kind.CLIMB_HIGH: 30.0}
+const ANIMS := {Kind.VAULT: &"vault", Kind.CLIMB: &"climb", Kind.MANTLE: &"mantle_low", Kind.CLIMB_HIGH: &"climb_high"}
 
 var kind: Kind = Kind.NONE
 var _player: PlayerController
@@ -58,6 +74,11 @@ func try_start() -> bool:
 	var scan := analyze(_player.global_position, _player.facing())
 	if scan.is_empty():
 		return false
+	var cost: float = STAMINA_COST[scan.kind]
+	if _player.stats.stamina < cost:
+		Events.notify.emit("Sem fôlego para escalar")
+		return true  # consome o toque (não pula contra a parede)
+	_player.stats.spend_stamina(cost)
 	_begin(scan)
 	return true
 
@@ -107,10 +128,11 @@ func analyze(origin: Vector3, facing: Vector3) -> Dictionary:
 		if _capsule_free(space, land + Vector3.UP * (far_ground + 0.05)):
 			return {"kind": Kind.VAULT, "height": height, "face": face, "thick": thick, "fwd": fwd,
 				"land": far_ground}
-	if height >= CLIMB_MIN:
-		var stand := origin + fwd * (face + 0.45) + Vector3.UP * (height + 0.03)
+	if height >= MANTLE_MIN:
+		var kind_ := Kind.MANTLE if height < CLIMB_MIN else (Kind.CLIMB if height < CLIMB_HIGH_MIN else Kind.CLIMB_HIGH)
+		var stand := origin + fwd * (face + 0.4) + Vector3.UP * (height + 0.03)
 		if _capsule_free(space, stand):
-			return {"kind": Kind.CLIMB, "height": height, "face": face, "thick": thick, "fwd": fwd}
+			return {"kind": kind_, "height": height, "face": face, "thick": thick, "fwd": fwd}
 	return {}
 
 
@@ -123,11 +145,15 @@ func _begin(scan: Dictionary) -> void:
 	_thick = scan.thick
 	_time = 0.0
 	_sounded.clear()
-	var path: Array = VAULT_PATH if kind == Kind.VAULT else CLIMB_PATH
+	var path := _path()
 	_length = float(path[-1][0]) / FPS
-	_player.begin_parkour(&"vault" if kind == Kind.VAULT else &"climb", _fwd, _length)
+	_player.begin_parkour(ANIMS[kind], _fwd, _length)
 	Sfx.play_3d(&"player_effort", _player.global_position + Vector3.UP * 1.5)
-	if kind == Kind.CLIMB:
+	if kind == Kind.CLIMB_HIGH:
+		# esforço a mais enquanto está pendurado
+		_player.get_tree().create_timer(1.1).timeout.connect(
+			func() -> void: Sfx.play_3d(&"player_effort", _player.global_position + Vector3.UP * 1.8, 2.0))
+	if kind != Kind.VAULT:
 		Sfx.play_3d(&"climb_scrape", _player.global_position + _fwd * _face + Vector3.UP * _height, -4.0)
 
 
@@ -145,13 +171,23 @@ func step(delta: float) -> Vector3:
 	return pos
 
 
+func _path() -> Array:
+	match kind:
+		Kind.VAULT:
+			return VAULT_PATH
+		Kind.MANTLE:
+			return MANTLE_PATH
+		Kind.CLIMB_HIGH:
+			return CLIMB_HIGH_PATH
+	return CLIMB_PATH
+
+
 func _last_frame() -> float:
-	var path: Array = VAULT_PATH if kind == Kind.VAULT else CLIMB_PATH
-	return float(path[-1][0])
+	return float(_path()[-1][0])
 
 
 func _path_at(frame: float) -> Vector2:
-	var path: Array = VAULT_PATH if kind == Kind.VAULT else CLIMB_PATH
+	var path := _path()
 	for i in path.size() - 1:
 		var a: Array = path[i]
 		var b: Array = path[i + 1]
@@ -170,15 +206,17 @@ func _map_forward(f: float) -> float:
 		if f <= VAULT_FACE + VAULT_THICK:
 			return _face + (f - VAULT_FACE) * _thick / VAULT_THICK
 		return _face + _thick + (f - VAULT_FACE - VAULT_THICK)
-	if f <= CLIMB_FACE:
-		return f * _face / CLIMB_FACE
-	return _face + (f - CLIMB_FACE)
+	var std_face: float = {Kind.CLIMB: CLIMB_FACE, Kind.MANTLE: MANTLE_FACE, Kind.CLIMB_HIGH: CLIMB_HIGH_FACE}[kind]
+	if f <= std_face:
+		return f * _face / std_face
+	return _face + (f - std_face)
 
 
 func _map_up(u: float) -> float:
 	if kind == Kind.VAULT:
 		return u * _height / VAULT_H
-	return u * (_height + 0.03) / CLIMB_H
+	var std_h: float = {Kind.CLIMB: CLIMB_H, Kind.MANTLE: MANTLE_H, Kind.CLIMB_HIGH: CLIMB_HIGH_H}[kind]
+	return u * (_height + 0.03) / std_h
 
 
 func _ray(space: PhysicsDirectSpaceState3D, a: Vector3, b: Vector3) -> Dictionary:

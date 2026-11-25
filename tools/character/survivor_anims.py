@@ -451,29 +451,6 @@ def crouch_idle(rig):
     finish(rig, act)
 
 
-def jump(rig):
-    """Impulso + pose no ar (fica no último quadro enquanto estiver no ar)."""
-    act = new_action(rig, "jump", 16)
-    keys = [  # quadro, quadril z, inclinação, pés (frente, altura, pitch), mãos (frente, altura)
-        (0, -0.03, 4, ((0.0, 0.0, 0), (0.0, 0.0, 0)), (0.0, -0.55)),
-        (5, -0.2, 22, ((0.02, 0.0, 0), (-0.02, 0.0, 0)), (0.18, -0.5)),
-        (9, 0.02, 2, ((0.0, 0.02, -35), (-0.03, 0.03, -35)), (-0.25, -0.15)),
-        (16, -0.08, 8, ((0.15, 0.28, 5), (-0.12, 0.2, -15)), (-0.18, -0.25)),
-    ]
-    for f, z, lean, feet, (hf, hz) in keys:
-        rig.begin()
-        rig.pelvis(Vector((0, 0, z)))
-        rig.torso(lean=lean)
-        rig.head(pitch=-lean * 0.5)
-        for (side, x), (fw, up, pt) in zip((("L", 0.11), ("R", -0.11)), feet):
-            rig.foot(side, Vector((x, -fw, rig.ground_ankle + up)), pt)
-        for side in ("L", "R"):
-            sx = 1.0 if side == "L" else -1.0
-            rig.hand(side, rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.1, hf, hz))), fist=0.5)
-        rig.key(f)
-    finish(rig, act, cyclic=False)
-
-
 def death(rig):
     """Cambaleia, cai de joelhos e desaba de bruços."""
     act = new_action(rig, "death", 50)
@@ -617,6 +594,27 @@ def mouth_pos(rig, forward=0.1):
     return rig.pos("head") + rig.world("head") @ Vector((0.0, -forward, 0.035))
 
 
+def hand_item_pose(rig, t, tilt):
+    """Mão direita segurando um item: t=0 à frente da barriga, t=1 junto à boca.
+    O cotovelo fica sempre para baixo e para fora (nunca cruza o corpo), o antebraço sobe
+    por fora até a boca e o eixo do item (polegar) aponta para a boca, inclinando com `tilt`."""
+    sh = rig.shoulder_pos("R")
+    rest = sh + rig.chest_vec(Vector((-0.05, -0.3, -0.42)))
+    mouth = mouth_pos(rig, 0.11)
+    at_mouth = mouth + rig.chest_vec(Vector((-0.05, -0.11, -0.05)))
+    k = smooth(t)
+    # caminho em arco: sobe por fora e um pouco à frente (não atravessa o peito)
+    mid = rest.lerp(at_mouth, k) + rig.chest_vec(Vector((-0.05, -0.06, 0.0))) * math.sin(math.pi * k)
+    elbow_guess = sh + rig.chest_vec(Vector((-0.06, -0.12 - 0.08 * k, -0.27 + 0.05 * k)))
+    fwd = (mid - elbow_guess).normalized()
+    up = rig.chest_vec(Vector((0.0, 0.0, 1.0)))
+    to_mouth = (mouth - mid)
+    to_mouth = (to_mouth - up * to_mouth.dot(up) * 0.3).normalized()
+    thumb = up.lerp(to_mouth, min(tilt * k, 1.0)).normalized()
+    pole = rig.chest_vec(Vector((-0.45, -0.35 - 0.3 * k, -0.85)))
+    rig.hand("R", mid, fwd=fwd, thumb=thumb, pole=pole, fist=0.85)
+
+
 def consume_anim(rig, name, frames, keys):
     """Leva o item à boca. keys: (quadro, 0..1 = quanto a mão está na boca, inclinação da cabeça, inclinação do item)."""
     act = new_action(rig, name, frames)
@@ -628,26 +626,22 @@ def consume_anim(rig, name, frames, keys):
         rig.foot("L", Vector((0.12, -0.04, rig.ground_ankle)), yaw=8)
         rig.foot("R", Vector((-0.12, 0.05, rig.ground_ankle)), yaw=-10)
         arm_pendulum(rig, "L", 4, 14, out=0.08, fist=0.22)
-        rest = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.05, -0.28, -0.42)))
-        at_mouth = mouth_pos(rig) + rig.chest_vec(Vector((-0.02, -0.02, -0.03)))
-        grip = rest.lerp(at_mouth, smooth(t))
-        # item em pé na mão; ao beber inclina com o topo para a boca
-        up = rig.chest_vec(Vector((0.0, item_tilt, 1.0)))
-        rig.hand("R", grip, fwd=rig.chest_vec(Vector((0.0, -1.0, 0.2))), thumb=up, fist=0.85)
+        hand_item_pose(rig, t, item_tilt)
+        rig.shoulders(raise_r=4 * t)
         rig.key(f)
     finish(rig, act, cyclic=False)
 
 
 def drink(rig):
     consume_anim(rig, "drink", 48, [
-        (0, 0.0, 0, 0.0), (10, 1.0, 10, 0.4), (16, 1.0, 20, 1.1), (34, 1.0, 22, 1.2),
-        (40, 0.9, 8, 0.4), (48, 0.0, 0, 0.0)])
+        (0, 0.0, 0, 0.0), (10, 0.9, 6, 0.5), (15, 1.0, 18, 0.9), (34, 1.0, 22, 1.0),
+        (40, 0.85, 6, 0.4), (48, 0.0, 0, 0.0)])
 
 
 def eat(rig):
     consume_anim(rig, "eat", 48, [
-        (0, 0.0, 0, 0.0), (9, 1.0, -6, 0.2), (14, 0.75, -4, 0.1), (19, 1.0, -6, 0.2),
-        (25, 0.75, -4, 0.1), (31, 1.0, -6, 0.2), (40, 0.5, 0, 0.0), (48, 0.0, 0, 0.0)])
+        (0, 0.0, 0, 0.0), (9, 1.0, -6, 0.35), (14, 0.8, -3, 0.25), (19, 1.0, -6, 0.35),
+        (25, 0.8, -3, 0.25), (31, 1.0, -6, 0.35), (40, 0.5, 0, 0.1), (48, 0.0, 0, 0.0)])
 
 
 def pickup(rig):
@@ -807,11 +801,199 @@ def hold_item(rig):
         rig.foot("L", Vector((0.11, 0.0, rig.ground_ankle)))
         rig.foot("R", Vector((-0.11, 0.0, rig.ground_ankle)))
         arm_pendulum(rig, "L", 4, 14, out=0.08, fist=0.22)
-        grip = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.02, -0.3, -0.36 + 0.005 * b)))
-        rig.hand("R", grip, fwd=rig.chest_vec(Vector((0.3, -1.0, 0.3))), thumb=rig.chest_vec(Vector((0.0, 0.0, 1.0))),
-                 fist=0.85)
+        hand_item_pose(rig, 0.05 + 0.01 * b, 0.0)
         rig.key(f)
     finish(rig, act)
+
+
+# ---------------------------------------------------------------- pulos, quedas e aterrissagens
+
+def _air_pose(rig, drop, lean, feet, hands, fist=0.4, head=None):
+    """feet: ((x, frente, altura, pitch) esq, dir) relativos ao corpo; hands: (frente, altura) relativos
+    ao ombro no referencial do peito, por lado (esq, dir)."""
+    rig.pelvis(Vector((0, 0, -drop)))
+    rig.torso(lean=lean)
+    rig.head(pitch=head if head is not None else -lean * 0.4)
+    for side, (x, fw, up, pt) in zip(("L", "R"), feet):
+        rig.foot(side, Vector((x, -fw, rig.ground_ankle + up)), pt)
+    for side, (hf, hz, hx) in zip(("L", "R"), hands):
+        sx = 1.0 if side == "L" else -1.0
+        rig.hand(side, rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * hx, -hf, hz))), fist=fist)
+
+
+def jump(rig):
+    """Pulo parado: agacha (preparação), estende o corpo jogando os braços para cima e encolhe no ar.
+    O jogo aplica o impulso no quadro 4 (0,13 s), quando as pernas começam a estender."""
+    act = new_action(rig, "jump", 18)
+    keys = [  # quadro, queda quadril, inclinação, pés (x, frente, altura, pitch), mãos (frente, altura, lado)
+        (0, (0.03, 3, (0.11, 0.0, 0.0, 0), (-0.11, 0.0, 0.0, 0), (0.0, -0.55, 0.08), (0.0, -0.55, 0.08))),
+        (4, (0.24, 26, (0.12, 0.02, 0.0, 0), (-0.12, -0.02, 0.0, 0), (-0.22, -0.45, 0.12), (-0.22, -0.45, 0.12))),
+        (7, (-0.02, 4, (0.11, 0.0, 0.04, -40), (-0.11, -0.03, 0.06, -45), (0.3, -0.05, 0.12), (0.28, -0.08, 0.12))),
+        (12, (0.06, 8, (0.12, 0.08, 0.26, -10), (-0.12, -0.05, 0.2, -20), (0.22, -0.22, 0.16), (0.2, -0.25, 0.16))),
+        (18, (0.08, 6, (0.12, 0.06, 0.22, 0), (-0.12, -0.02, 0.16, -10), (0.15, -0.3, 0.18), (0.15, -0.3, 0.18))),
+    ]
+    for f, (drop, lean, fl, fr, hl, hr) in keys:
+        rig.begin()
+        _air_pose(rig, drop, lean, (fl, fr), (hl, hr))
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def jump_run(rig):
+    """Pulo correndo: impulso com a perna esquerda, joelho direito sobe, braços em oposição; no ar as
+    pernas fazem uma passada larga e se juntam para aterrissar."""
+    act = new_action(rig, "jump_run", 18)
+    keys = [
+        (0, (0.06, 10, (0.11, -0.25, 0.0, -20), (-0.11, 0.2, 0.12, 0), (-0.25, -0.4, 0.1), (0.3, -0.2, 0.12))),
+        (4, (0.0, 12, (0.11, -0.38, 0.08, -50), (-0.11, 0.35, 0.42, 10), (-0.3, -0.35, 0.12), (0.35, -0.05, 0.14))),
+        (10, (0.02, 10, (0.11, -0.4, 0.3, -20), (-0.11, 0.4, 0.35, 10), (-0.15, -0.3, 0.2), (0.35, -0.1, 0.18))),
+        (18, (0.08, 8, (0.11, 0.05, 0.25, 5), (-0.11, 0.15, 0.2, 5), (0.15, -0.3, 0.2), (0.2, -0.3, 0.2))),
+    ]
+    for f, (drop, lean, fl, fr, hl, hr) in keys:
+        rig.begin()
+        _air_pose(rig, drop, lean, (fl, fr), (hl, hr), fist=0.6)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def fall(rig):
+    """Queda longa: braços abertos se equilibrando, pernas dobradas se preparando para o impacto."""
+    frames = 24
+    act = new_action(rig, "fall", frames)
+    for f in range(0, frames + 1, 3):
+        p = f / frames
+        w = math.sin(2 * math.pi * p)
+        rig.begin()
+        _air_pose(rig, 0.06, 4 + 3 * w,
+                  ((0.13, 0.1 + 0.05 * w, 0.22, -5), (-0.13, -0.05 - 0.05 * w, 0.28, -15)),
+                  ((0.1 + 0.08 * w, -0.05, 0.4), (0.1 - 0.08 * w, -0.08, 0.4)), fist=0.2, head=12)
+        rig.key(f)
+    finish(rig, act)
+
+
+def land(rig):
+    """Aterrissagem leve: os joelhos absorvem o impacto e o corpo volta."""
+    act = new_action(rig, "land", 12)
+    keys = [(0, 0.1, 8, 0.1), (3, 0.24, 16, 0.25), (6, 0.2, 12, 0.2), (12, 0.03, 3, 0.0)]
+    for f, drop, lean, arms in keys:
+        rig.begin()
+        _air_pose(rig, drop, lean, ((0.12, 0.03, 0.0, 0), (-0.12, -0.03, 0.0, 0)),
+                  ((0.15 * arms + 0.05, -0.5 + arms * 0.2, 0.1), (0.15 * arms + 0.05, -0.5 + arms * 0.2, 0.1)), fist=0.3)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def land_hard(rig):
+    """Queda alta: agacha fundo, apoia a mão direita no chão e levanta devagar."""
+    act = new_action(rig, "land_hard", 30)
+    keys = [(0, 0.2, 15, 0.0), (4, 0.5, 40, 1.0), (10, 0.52, 42, 1.0), (18, 0.35, 30, 0.4), (30, 0.03, 3, 0.0)]
+    for f, drop, lean, touch in keys:
+        rig.begin()
+        rig.pelvis(Vector((0, 0.05, -drop)), pitch=lean * 0.3)
+        rig.torso(lean=lean)
+        rig.head(pitch=lean * 0.3)
+        rig.foot("L", Vector((0.14, -0.08, rig.ground_ankle)), yaw=10)
+        rig.foot("R", Vector((-0.14, 0.1, rig.ground_ankle + 0.03 * touch)), pitch=-25 * touch, yaw=-10)
+        ground = Vector((-0.2, -0.32, 0.05))
+        free = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.12, -0.2, -0.5)))
+        rig.hand("R", free.lerp(ground, smooth(touch)), fist=0.1)
+        rig.hand("L", rig.shoulder_pos("L") + rig.chest_vec(Vector((0.25, -0.15, -0.35))), fist=0.3)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+# ---------------------------------------------------------------- escaladas por altura
+# Subir em bloco baixo (caixas, capô): apoia as mãos, sobe um pé e fica de pé. Padrão: 0,9 m, face a 0,4 m.
+MANTLE_PATH = [(0, 0.0, 0.0), (5, 0.15, 0.0), (10, 0.3, 0.35), (16, 0.42, 0.72), (22, 0.62, 0.9),
+               (28, 0.72, 0.9)]
+MANTLE_H, MANTLE_FACE = 0.9, 0.4
+# Escalada alta: pula, agarra a borda com os braços esticados, fica pendurado se esforçando (pés
+# raspando na parede), puxa o corpo, passa os cotovelos, engancha a perna e sobe. Padrão: 2,2 m.
+CLIMB_HIGH_PATH = [(0, 0.0, 0.0), (6, 0.1, 0.0), (11, 0.3, 0.55), (16, 0.32, 0.22), (24, 0.33, 0.3),
+                   (32, 0.33, 0.24), (42, 0.35, 0.85), (50, 0.38, 1.3), (58, 0.5, 1.75), (68, 0.78, 2.2),
+                   (78, 0.9, 2.2)]
+CLIMB_HIGH_H, CLIMB_HIGH_FACE = 2.2, 0.45
+
+
+def mantle_low(rig):
+    frames = MANTLE_PATH[-1][0]
+    act = new_action(rig, "mantle_low", frames)
+    top = MANTLE_H + 0.02
+    keys = [(0, (0.03, 5, 0.0)), (5, (0.2, 30, 0.6)), (10, (0.15, 38, 1.0)), (16, (0.25, 30, 1.0)),
+            (22, (0.15, 12, 0.3)), (28, (0.03, 4, 0.0))]
+    feet_keys = [  # mundo: pé esq (x, frente, altura), pé dir
+        (0, (0.11, 0.0, 0.0, -0.11, 0.0, 0.0)), (5, (0.12, 0.08, 0.0, -0.12, 0.15, 0.0)),
+        (10, (0.12, 0.1, 0.0, -0.12, 0.5, top)), (16, (0.12, 0.3, 0.45, -0.12, 0.55, top)),
+        (22, (0.12, 0.62, top, -0.12, 0.62, top)), (28, (0.11, 0.72, top, -0.11, 0.72, top))]
+    for f in range(frames + 1):
+        pf, pu = path_at(MANTLE_PATH, f)
+        drop, lean, hands = keyed(keys, f)
+        rig.begin()
+        rig.pelvis(Vector((0, 0, -drop)), pitch=lean * 0.2)
+        rig.torso(lean=lean)
+        rig.head(pitch=lean * 0.3)
+        lx, ly, lz, rx, ry, rz = keyed(feet_keys, f)
+        for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
+            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-20 if 0.05 < z < top - 0.05 else 0)
+        for side in ("L", "R"):
+            sx = 1.0 if side == "L" else -1.0
+            on_top = world_to_local(rig, pf, pu, sx * 0.2, MANTLE_FACE + 0.12, top)
+            rest = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.08, -0.1, -0.55)))
+            rig.hand(side, rest.lerp(on_top, hands), fist=0.15)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def climb_high(rig):
+    frames = CLIMB_HIGH_PATH[-1][0]
+    act = new_action(rig, "climb_high", frames)
+    top = CLIMB_HIGH_H + 0.02
+    edge = CLIMB_HIGH_FACE + 0.05
+    # quadro: (queda do quadril, inclinação do tronco, mãos na borda 0..1, cotovelo sobre a borda 0..1)
+    keys = [(0, (0.03, 4, 0.0, 0.0)), (6, (0.24, 24, 0.0, 0.0)), (11, (0.0, -4, 1.0, 0.0)),
+            (16, (0.0, -6, 1.0, 0.0)), (24, (0.04, -2, 1.0, 0.0)), (32, (0.0, -6, 1.0, 0.0)),
+            (42, (0.06, 8, 1.0, 0.3)), (50, (0.1, 30, 1.0, 1.0)), (58, (0.18, 42, 1.0, 1.0)),
+            (68, (0.25, 28, 0.3, 0.0)), (78, (0.03, 4, 0.0, 0.0))]
+    # pés (mundo): no chão, depois raspando na parede (alternando) e por fim em cima
+    feet_keys = [
+        (0, (0.11, 0.0, 0.0, -0.11, 0.0, 0.0)), (6, (0.12, 0.06, 0.0, -0.12, 0.12, 0.0)),
+        (11, (0.12, 0.2, 0.3, -0.12, 0.25, 0.2)), (16, (0.12, 0.38, 0.45, -0.12, 0.3, 0.15)),
+        (20, (0.12, 0.36, 0.35, -0.12, 0.39, 0.62)), (24, (0.12, 0.39, 0.7, -0.12, 0.36, 0.45)),
+        (28, (0.12, 0.36, 0.5, -0.12, 0.39, 0.75)), (32, (0.12, 0.39, 0.8, -0.12, 0.37, 0.55)),
+        (42, (0.12, 0.38, 1.0, -0.12, 0.39, 1.25)), (50, (0.12, 0.38, 1.3, -0.12, 0.4, 1.55)),
+        (58, (0.12, 0.37, 1.5, -0.12, 0.62, top)), (68, (0.12, 0.7, top, -0.12, 0.78, top)),
+        (78, (0.11, 0.9, top, -0.11, 0.9, top))]
+    for f in range(frames + 1):
+        pf, pu = path_at(CLIMB_HIGH_PATH, f)
+        drop, lean, grab, over = keyed(keys, f)
+        # esforço: tremor nos ombros enquanto pendurado e puxando
+        strain = 1.0 if 14 <= f <= 48 else 0.0
+        shake = strain * 2.5 * math.sin(f * 2.3)
+        rig.begin()
+        rig.pelvis(Vector((0, 0, -drop)), pitch=lean * 0.2, roll=shake * 0.5)
+        rig.torso(lean=lean, roll=shake)
+        rig.head(pitch=-25 + lean * 0.6 if f < 44 else lean * 0.4, yaw=shake * 2)
+        lx, ly, lz, rx, ry, rz = keyed(feet_keys, f)
+        for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
+            near_wall = 0.05 < z < top - 0.05
+            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-35 if near_wall else 0)
+        for side in ("L", "R"):
+            sx = 1.0 if side == "L" else -1.0
+            hold = world_to_local(rig, pf, pu, sx * 0.24, edge, top)
+            # cotovelos sobre a borda: as mãos avançam e empurram para baixo
+            push = world_to_local(rig, pf, pu, sx * 0.2, edge + 0.25, top)
+            reach = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.15, -0.2, 0.5)))
+            rest = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.08, -0.05, -0.55)))
+            target = hold.lerp(push, over)
+            if f < 11:
+                target = rest.lerp(reach, smooth(f / 11))
+            elif grab < 0.99:
+                target = rest.lerp(target, grab)
+            pole = rig.chest_vec(Vector((sx * 0.6, 0.6, -0.4)))
+            rig.hand(side, target, pole=pole, fist=0.5 + 0.4 * grab)
+        rig.shoulders(raise_l=8 * strain, raise_r=8 * strain)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
 
 
 def create_all(arm):
@@ -840,7 +1022,25 @@ def create_all(arm):
     crouch_idle(rig)
     locomotion(rig, "crouch_walk", Gait(1.2, (0.35, 0.35), 0.66, 0.08, 0.13, 0.42, 0.012, math.pi, 26, 6, 3, 0.02, 0.2,
                                         "crouch", 9, heel=8, toe_off=15))
+    #                                     ciclo  passada  apoio elev. larg. queda bob   fase  incl. q.yaw q.roll sway imp.
+    locomotion(rig, "crouch_walk_back", Gait(1.25, (0.28, 0.28), 0.66, 0.07, 0.13, 0.42, 0.01, math.pi, 22, 4, 3,
+                                             0.02, 0.2, "crouch", 6, heel=4, toe_off=10, direction=(0.0, -1.0)))
+    for name, d in (("left", (-1.0, 0.0)), ("right", (1.0, 0.0))):
+        locomotion(rig, f"crouch_walk_{name}", Gait(1.1, (0.22, 0.22), 0.6, 0.07, 0.18, 0.42, 0.01, math.pi, 24, 2,
+                                                    4, 0.015, 0.2, "crouch", 5, heel=3, toe_off=8, direction=d))
+    # andar mirando: joelhos levemente dobrados, passos curtos e "rolados", quase sem sobe-e-desce
+    locomotion(rig, "walk_aim", Gait(1.0, (0.3, 0.32), 0.6, 0.07, 0.12, 0.07, 0.006, math.pi, 8, 2, 2, 0.015,
+                                     0.12, "walk", 4, heel=10, toe_off=15))
+    locomotion(rig, "walk_aim_back", Gait(1.05, (0.27, 0.27), 0.6, 0.07, 0.12, 0.07, 0.006, math.pi, 4, 2, 2,
+                                          0.015, 0.12, "walk", 3, heel=4, toe_off=10, direction=(0.0, -1.0)))
+    for name, d in (("left", (-1.0, 0.0)), ("right", (1.0, 0.0))):
+        locomotion(rig, f"walk_aim_{name}", Gait(0.95, (0.22, 0.22), 0.55, 0.06, 0.17, 0.07, 0.006, math.pi, 6, 1,
+                                                 3, 0.012, 0.12, "walk", 3, heel=3, toe_off=8, direction=d))
     jump(rig)
+    jump_run(rig)
+    fall(rig)
+    land(rig)
+    land_hard(rig)
     death(rig)
     hold_melee(rig)
     attack_melee(rig)
@@ -852,6 +1052,8 @@ def create_all(arm):
     pickup(rig)
     vault(rig)
     climb(rig)
+    mantle_low(rig)
+    climb_high(rig)
     hold_item(rig)
     for pb in rig.pb:
         pb.rotation_quaternion = Quaternion()

@@ -480,6 +480,9 @@ func _build_props(root: Node) -> void:
 	for i in crates.size():
 		_block(props, "Crate%d" % i, Vector3.ONE, crates[i], crate, LAYER_WORLD, Vector3(0, i * 17 % 40, 0))
 	_block(props, "LowWall", Vector3(3, 0.6, 0.4), Vector3(-4, 0.3, 2), Color(0.42, 0.41, 0.38))
+	# área de treino de escalada: bloco baixo (0,8 m) e muro alto (2,2 m)
+	_block(props, "LowBlock", Vector3(2.0, 0.8, 1.5), Vector3(16.5, 0.4, -9), Color(0.45, 0.44, 0.4))
+	_block(props, "ClimbWall", Vector3(3.0, 2.2, 3.0), Vector3(16.5, 1.1, 3), Color(0.5, 0.49, 0.45))
 	_block(props, "Fence", Vector3(0.15, 1.2, 10), Vector3(7, 0.6, 12), Color(0.3, 0.27, 0.22))
 
 	# Carro abandonado na estrada

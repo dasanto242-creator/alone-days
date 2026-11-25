@@ -6,6 +6,8 @@ extends Control
 var _kind := ItemData.WeaponKind.NONE
 var _hit_flash := 0.0
 var _ammo_label: Label
+var _gap := 6.0
+var _weapons: WeaponHandler
 
 
 func _ready() -> void:
@@ -34,6 +36,20 @@ func _process(delta: float) -> void:
 	if _hit_flash > 0.0:
 		_hit_flash = maxf(_hit_flash - delta, 0.0)
 		queue_redraw()
+	if _kind != ItemData.WeaponKind.PISTOL:
+		return
+	# a mira abre quando a arma fica imprecisa (andando, correndo, pulando) e fecha parado
+	if _weapons == null or not is_instance_valid(_weapons):
+		var p := get_tree().get_first_node_in_group("player")
+		_weapons = p.get_node_or_null("Weapons") as WeaponHandler if p else null
+	if _weapons:
+		var cam := get_viewport().get_camera_3d()
+		var px_per_deg := size.y / (cam.fov if cam else 70.0)
+		var target := 4.0 + _weapons.current_spread_degrees() * px_per_deg
+		var g := lerpf(_gap, target, 1.0 - exp(-10.0 * delta))
+		if absf(g - _gap) > 0.05:
+			_gap = g
+			queue_redraw()
 
 
 func _on_weapon_state_changed(kind: int, ammo_text: String, _has_weapons: bool) -> void:
@@ -47,7 +63,7 @@ func _draw() -> void:
 		return
 	var c := size * 0.5
 	var color := UiTheme.DANGER if _hit_flash > 0.0 else Color(0.92, 0.92, 0.86, 0.85)
-	var gap := 6.0
+	var gap := _gap
 	var length := 9.0
 	for dir in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		draw_line(c + dir * gap, c + dir * (gap + length), Color(0, 0, 0, 0.5), 4.0)

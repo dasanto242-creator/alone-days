@@ -206,6 +206,14 @@ func _shoot(d: ItemData) -> void:
 	var cam := _player.get_viewport().get_camera_3d()
 	var from := cam.global_position
 	var dir := -cam.global_basis.z
+	# atirar andando/correndo é menos preciso; agachado e parado é o mais firme
+	var spread := deg_to_rad(current_spread_degrees())
+	if spread > 0.0:
+		var right := cam.global_basis.x
+		var up := cam.global_basis.y
+		var a := randf() * TAU
+		var r := sqrt(randf()) * spread
+		dir = (dir + (right * cos(a) + up * sin(a)) * tan(r)).normalized()
 	var query := PhysicsRayQueryParameters3D.create(from, from + dir * d.attack_range, 1 | 4 | 16)
 	query.exclude = [_player.get_rid()]
 	var hit := _player.get_world_3d().direct_space_state.intersect_ray(query)
@@ -233,6 +241,17 @@ func _on_inventory_changed() -> void:
 	else:
 		_player.animator().set_wielded(wielded_slot, _player.inventory)
 		_emit_state()
+
+
+## Imprecisão atual da arma (graus): cresce com a velocidade e no ar, diminui agachado.
+func current_spread_degrees() -> float:
+	var speed := Vector2(_player.velocity.x, _player.velocity.z).length()
+	var deg := 0.35 + minf(speed, 5.0) * 1.1
+	if not _player.is_on_floor():
+		deg += 4.0
+	if _player.is_crouching:
+		deg *= 0.6
+	return deg
 
 
 func ammo_text() -> String:

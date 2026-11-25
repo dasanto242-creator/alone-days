@@ -7,6 +7,7 @@ func _ready() -> void:
 	var path := args[0] if args.size() > 0 else "res://assets/models/survivor/survivor.glb"
 	var prefix := args[1] if args.size() > 1 else "model"
 	var anim_name := args[2] if args.size() > 2 else ""
+	_close = args.size() > 3 and args[3] == "close"
 
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -58,6 +59,9 @@ func _ready() -> void:
 	get_tree().quit()
 
 
+var _close := false
+
+
 ## Captura 6 quadros da animação, de lado e de frente.
 func _anim_sheet(model: Node3D, player: AnimationPlayer, anim_name: String, prefix: String) -> void:
 	var cam := Camera3D.new()
@@ -68,10 +72,31 @@ func _anim_sheet(model: Node3D, player: AnimationPlayer, anim_name: String, pref
 	player.play(anim_name)
 	player.pause()
 	var length := player.current_animation_length
-	for view in [["side", 90.0], ["front", 20.0]]:
+	if _close:
+		# garrafa de teste na mão direita (eixo +Y = polegar), para conferir a orientação
+		var hand := model.find_child("Socket_Hand_R", true, false) as Node3D
+		if hand:
+			var bottle := MeshInstance3D.new()
+			var cyl := CylinderMesh.new()
+			cyl.top_radius = 0.02
+			cyl.bottom_radius = 0.035
+			cyl.height = 0.22
+			bottle.mesh = cyl
+			var m := StandardMaterial3D.new()
+			m.albedo_color = Color(0.3, 0.6, 0.95)
+			bottle.material_override = m
+			hand.add_child(bottle)
+	var views := [["side", 90.0], ["front", 20.0]]
+	if _close:
+		views = [["side", 90.0], ["front", 10.0], ["right", -60.0]]
+	for view in views:
 		var yaw := deg_to_rad(view[1])
-		cam.position = Vector3(0, 0.95, 0) + Vector3(sin(yaw), 0.08, cos(yaw)) * 5.0
-		cam.look_at(Vector3(0, 0.85, 0))
+		if _close:
+			cam.position = Vector3(0, 1.35, 0) + Vector3(sin(yaw), 0.05, cos(yaw)) * 2.2
+			cam.look_at(Vector3(0, 1.3, 0))
+		else:
+			cam.position = Vector3(0, 0.95, 0) + Vector3(sin(yaw), 0.08, cos(yaw)) * 5.0
+			cam.look_at(Vector3(0, 0.85, 0))
 		for i in 6:
 			player.seek(length * i / 6.0, true)
 			for k in 4:

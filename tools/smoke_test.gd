@@ -418,6 +418,77 @@ func _run_parkour_axe() -> void:
 	await get_tree().create_timer(2.0).timeout
 	_check("Subiu na plataforma (y = %.2f)" % _player.global_position.y,
 		_player.global_position.y > 1.4 and _player.global_position.z > -5.9 and _player.is_on_floor())
+	# --- Bloco baixo (0,8 m): sobe apoiando as mãos
+	stats.stamina = 100.0
+	_teleport(Vector3(16.5, 0.05, -10.6), 0.0)
+	visual.rotation.y = PI  # olhando para +Z
+	await _frames(8)
+	scan = _player.parkour.analyze(_player.global_position, _player.facing())
+	_check("Bloco baixo: sobe apoiando as mãos (altura %.2f)" % float(scan.get("height", 0.0)),
+		scan.get("kind", -1) == Parkour.Kind.MANTLE)
+	await _tap_action("jump")
+	await get_tree().create_timer(1.3).timeout
+	_check("Em cima do bloco (y = %.2f)" % _player.global_position.y, _player.global_position.y > 0.7)
+	# --- Muro alto (2,2 m): pendura, se esforça e sobe
+	stats.stamina = 100.0
+	_teleport(Vector3(16.5, 0.05, 5.4), 0.0)
+	visual.rotation.y = 0.0
+	await _frames(8)
+	scan = _player.parkour.analyze(_player.global_position, _player.facing())
+	_check("Muro de 2,2 m: escalada difícil (%.2f m)" % float(scan.get("height", 0.0)),
+		scan.get("kind", -1) == Parkour.Kind.CLIMB_HIGH)
+	var st0 := stats.stamina
+	await _tap_action("jump")
+	await _frames(3)
+	_check("Escalada alta gasta muito fôlego (%.0f → %.0f)" % [st0, stats.stamina], st0 - stats.stamina >= 25.0)
+	await get_tree().create_timer(1.0).timeout
+	_check("Ainda pendurado se esforçando no meio da escalada (y = %.2f)" % _player.global_position.y,
+		_player.parkour.is_active() and _player.global_position.y < 1.0)
+	await get_tree().create_timer(2.2).timeout
+	_check("Subiu no muro alto (y = %.2f)" % _player.global_position.y, _player.global_position.y > 2.1)
+	stats.stamina = 10.0
+	_teleport(Vector3(16.5, 0.05, 5.4), 0.0)
+	visual.rotation.y = 0.0
+	await _frames(8)
+	await _tap_action("jump")
+	await _frames(3)
+	_check("Sem fôlego não consegue escalar o muro alto", not _player.parkour.is_active())
+	stats.stamina = 100.0
+
+	# --- Pulo: agacha antes (preparação) e aterrissa dobrando os joelhos
+	_teleport(Vector3(0, 0.05, 22.0), 0.0)
+	await _frames(10)
+	var tree_l := (_player.get_node("Visual") as SurvivorAnimator).get("_tree") as AnimationTree
+	await _tap_action("jump")
+	_check("Pulo parado: prepara no chão antes do impulso (vel y %.1f)" % _player.velocity.y,
+		_player.velocity.y <= 0.01 and (_player.get_node("Visual") as SurvivorAnimator).current_animation() == &"jump")
+	await get_tree().create_timer(0.25).timeout
+	_check("Depois da preparação sai do chão", not _player.is_on_floor())
+	var landed := false
+	for i in 60:
+		await _frames(1)
+		if tree_l.get("parameters/land/active"):
+			landed = true
+			break
+	_check("Aterrissagem dobra os joelhos (animação de aterrissar)", landed)
+	await get_tree().create_timer(0.5).timeout
+	# queda alta: aterrissagem pesada e dano
+	stats.health = 100.0
+	_teleport(Vector3(0, 6.0, 22.0), 0.0)
+	var hard := false
+	var saw_fall := false
+	for i in 120:
+		await _frames(1)
+		if (_player.get_node("Visual") as SurvivorAnimator).current_animation() == &"fall":
+			saw_fall = true
+		if tree_l.get("parameters/land/active"):
+			hard = tree_l.get("parameters/land_kind/current_state") == "land_hard"
+			break
+	_check("Queda de 6 m: aterrissagem pesada e dano (vida %.0f)" % stats.health, hard and stats.health < 100.0)
+	_check("Animação de queda no ar (braços abertos)", saw_fall)
+	stats.health = 100.0
+	await get_tree().create_timer(0.8).timeout
+
 	# chão livre: Pular continua sendo um pulo normal
 	_teleport(Vector3(0, 0.05, 22.0), 0.0)
 	await _frames(8)
@@ -620,7 +691,8 @@ func _run_weapons() -> void:
 	var bp: Vector2 = tree2.get("parameters/loco_%s/blend_position" % animator.current_animation())
 	Input.action_release("move_right")
 	_check("De lado usa animação lateral (%s, mistura %s)" % [animator.current_animation(), bp],
-		animator.current_animation() in [&"walk", &"run"] and bp.x > 0.7)
+		animator.current_animation() in [&"walk_aim", &"run"] and bp.x > 0.7)
+	_check("Com arma em mãos anda mirando (passos curtos)", animator.current_animation() in [&"walk_aim", &"run"])
 	await _frames(30)
 	Input.action_press("move_back")
 	await _frames(45)

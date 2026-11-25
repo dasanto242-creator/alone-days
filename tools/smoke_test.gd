@@ -17,6 +17,13 @@ func _ready() -> void:
 	_rig = world.get_node("CameraRig")
 	_hud = world.get_node("HUD")
 	await _frames(20)
+	# zumbis do cenário ficam fora dos testes gerais (são testados à parte, em _run_zombie)
+	var spawner := world.get_node("ZombieSpawner") as ZombieSpawner
+	_check("Cenário cria zumbis (%d)" % get_tree().get_nodes_in_group("zombies").size(),
+		get_tree().get_nodes_in_group("zombies").size() == spawner.max_alive)
+	spawner.process_mode = Node.PROCESS_MODE_DISABLED
+	for z in get_tree().get_nodes_in_group("zombies"):
+		z.free()
 	await _run()
 	print("\n==== RESULTADO: %d ok, %d falhas ====" % [_passed, _failed])
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -180,7 +187,11 @@ func _run_stage2() -> void:
 	await _approach(Vector3(-10.3, 0.0, 2.4))
 	_check("Botão mostra 'Pegar' perto da mochila", interact_btn.visible and interact_btn.label == "Pegar")
 	await _tap_action("interact")
-	await _frames(3)
+	var tree_p := (_player.get_node("Visual") as SurvivorAnimator).get("_tree") as AnimationTree
+	_check("Pegar: abaixa para pegar do chão (animação %s)" % tree_p.get("parameters/use_kind/current_state"),
+		tree_p.get("parameters/use/active") and tree_p.get("parameters/use_kind/current_state") == "pickup")
+	_check("Item ainda no chão até a mão alcançar", inv.count_of(&"backpack") == 0)
+	await get_tree().create_timer(1.0).timeout
 	_check("Mochila foi para o inventário", inv.count_of(&"backpack") == 1)
 	_check("Capacidade base 6 kg (%.1f)" % inv.capacity(), is_equal_approx(inv.capacity(), 6.0))
 
@@ -195,13 +206,27 @@ func _run_stage2() -> void:
 
 	# --- Pegar água e beber
 	await _approach(Vector3(-9.6, 0.0, 6.5))
-	await _tap_action("interact")
-	await _frames(3)
+	await _pickup_wait()
 	_check("Pegou garrafa de água", inv.count_of(&"water_bottle") == 1)
 	stats.water = 30.0
 	var idx := _index_of(&"water_bottle")
 	_player.use_item(idx)
-	_check("Beber água: sede 30 → %.0f" % stats.water, is_equal_approx(stats.water, 70.0))
+	var water_after := stats.water
+	await _frames(3)
+	var anim_tree := (_player.get_node("Visual") as SurvivorAnimator).get("_tree") as AnimationTree
+	_check("Beber toca a animação de beber (corpo inteiro)",
+		anim_tree.get("parameters/use/active") and anim_tree.get("parameters/use_kind/current_state") == "drink")
+	var hand := _player.get_node("Visual/Model").find_child("Socket_Hand_R", true, false) as Node3D
+	await _frames(7)
+	_check("Garrafa aparece na mão ao beber", hand.get_child_count() > 0)
+	var before_busy := _player.global_position
+	Input.action_press("move_forward")
+	await _frames(20)
+	Input.action_release("move_forward")
+	_check("Não anda enquanto bebe (%.2f m)" % before_busy.distance_to(_player.global_position),
+		before_busy.distance_to(_player.global_position) < 0.1)
+	await get_tree().create_timer(1.6).timeout
+	_check("Beber água: sede 30 → %.0f" % water_after, is_equal_approx(water_after, 70.0))
 	_check("Garrafa consumida", inv.count_of(&"water_bottle") == 0)
 
 	# --- Fome e sede caem mais rápido correndo
@@ -279,6 +304,14 @@ func _run_stage2() -> void:
 	_player.drop_item(_index_of(&"soda_can"), 1)
 	await _frames(3)
 	_check("Largar cria item no chão (%d → %d)" % [count_before, _count_pickups()], _count_pickups() == count_before + 1)
+	var dropped: ItemPickup = null
+	for node in _player.get_parent().find_children("*", "RigidBody3D", true, false):
+		if node is ItemPickup and node.item_id == &"soda_can":
+			dropped = node
+	var drop_y := dropped.global_position.y
+	await get_tree().create_timer(1.5).timeout
+	_check("Item largado cai com física e repousa no chão (%.2f → %.2f m)" % [drop_y, dropped.global_position.y],
+		drop_y > 0.5 and dropped.global_position.y < 0.15 and dropped.global_position.y > -0.05)
 	_check("Sobrou 1 refrigerante", inv.count_of(&"soda_can") == 1)
 
 	# --- Limite de peso
@@ -326,12 +359,85 @@ func _run_stage2() -> void:
 	_check("Fechar volta aos controles", not screen.visible and controls.visible)
 
 	await _run_weapons()
+	await _run_zombie()
 
 	# --- Morte
 	stats.apply_damage(500.0)
 	await get_tree().create_timer(1.5).timeout
 	var death := _hud.get_node("DeathScreen") as Control
 	_check("Vida zerada mostra a tela de morte", stats.is_dead and death.visible)
+
+
+# ================================================================ ZUMBI
+
+func _run_zombie() -> void:
+	print("\n-- Zumbi --")
+	var world := _player.get_parent()
+	var stats := _player.stats
+	stats.health = 100.0
+	stats.stamina = 100.0
+	var weapons := _player.get_node("Weapons") as WeaponHandler
+	if weapons.wielded_slot != -1:
+		weapons.set_wielded(-1)
+	_teleport(Vector3(0, 0.05, 30), 0.0)
+	await _frames(5)
+	var z := (load("res://scenes/characters/zombie.tscn") as PackedScene).instantiate() as Zombie
+	world.add_child(z)
+	z.global_position = Vector3(0, 0.05, 36)
+	(z.get_node("Visual") as Node3D).rotation.y = PI   # de costas para o jogador (olhando +Z)
+	await _frames(10)
+	z._set_state(Zombie.State.IDLE)
+	var anim := z.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_check("Zumbi tem as 5 animações", anim.has_animation(&"z_walk") and anim.has_animation(&"z_attack")
+		and anim.has_animation(&"z_idle") and anim.has_animation(&"z_hit") and anim.has_animation(&"z_death"))
+	await get_tree().create_timer(1.0).timeout
+	_check("De costas não vê o jogador (%s)" % z.state_name(),
+		z.state in [Zombie.State.IDLE, Zombie.State.PATROL])
+	# barulho: tiro perto faz ele investigar
+	Events.noise_emitted.emit(Vector3(0, 0, 30), 45.0, _player)
+	await _frames(3)
+	_check("Ouve o tiro e vai investigar (%s)" % z.state_name(), z.state == Zombie.State.INVESTIGATE)
+	await get_tree().create_timer(3.5).timeout
+	_check("Vira, vê o jogador e persegue (%s)" % z.state_name(), z.state in [Zombie.State.ALERT, Zombie.State.CHASE, Zombie.State.ATTACK])
+	var zpos := z.global_position
+	await get_tree().create_timer(2.0).timeout
+	var zspeed := zpos.distance_to(z.global_position) / 2.0
+	_check("Anda devagar (%.2f m/s)" % zspeed, zspeed > 0.2 and zspeed < 1.2)
+	_check("Animação de andar cambaleante (%s)" % anim.current_animation, anim.current_animation == &"z_walk")
+	# deixa chegar e atacar
+	var hp := stats.health
+	var damaged := [false]
+	Events.player_damaged.connect(func(_a: float) -> void: damaged[0] = true, CONNECT_ONE_SHOT)
+	for i in 40:
+		if stats.health < hp:
+			break
+		await get_tree().create_timer(0.25).timeout
+	_check("Zumbi alcança e ataca: vida %.0f → %.0f" % [hp, stats.health], stats.health < hp and damaged[0])
+	var flash := _hud.get_node("DamageFlash") as ColorRect
+	_check("Tela pisca vermelho ao levar dano (%.2f)" % flash.color.a, flash.color.a > 0.05)
+	_check("Jogador não atravessa o zumbi (%.2f m)" % _player.global_position.distance_to(z.global_position),
+		Vector2(_player.global_position.x - z.global_position.x, _player.global_position.z - z.global_position.z).length() > 0.45)
+	# revida com a pistola: tiro na cabeça
+	stats.health = 100.0
+	var head := z.global_position + Vector3.UP * 1.6
+	z.apply_damage(35.0, _player, head)
+	_check("Tiro na cabeça mata (dano triplo, %s)" % z.state_name(), z.is_dead())
+	await get_tree().create_timer(0.5).timeout
+	_check("Animação de morte (%s)" % anim.current_animation, anim.current_animation == &"z_death")
+	_check("Corpo não bloqueia mais", z.collision_layer == 0)
+	# outro zumbi: golpe no corpo não mata de uma vez e faz ele cambalear
+	var z2 := (load("res://scenes/characters/zombie.tscn") as PackedScene).instantiate() as Zombie
+	world.add_child(z2)
+	z2.global_position = Vector3(6, 0.05, 36)
+	await _frames(5)
+	z2.apply_damage(25.0, _player, z2.global_position + Vector3.UP * 1.0)
+	await _frames(2)
+	_check("Golpe no corpo: vida %.0f, reação de dor (%s)" % [z2.health, z2.state_name()],
+		not z2.is_dead() and z2.state == Zombie.State.STAGGER)
+	z.queue_free()
+	z2.queue_free()
+	stats.health = 100.0
+	await _frames(5)
 
 
 # ================================================================ ARMAS
@@ -349,8 +455,7 @@ func _run_weapons() -> void:
 
 	# --- Pegar o taco: vai direto para as costas
 	await _approach(Vector3(6.6, 0.0, 4.8))
-	await _tap_action("interact")
-	await _frames(3)
+	await _pickup_wait()
 	var bat := inv.equipped(ItemData.Slot.MELEE)
 	_check("Taco vai direto para as costas", bat != null and bat.item_id == &"baseball_bat")
 	var bat_node := animator.weapon_node(ItemData.Slot.MELEE)
@@ -382,8 +487,7 @@ func _run_weapons() -> void:
 
 	# --- Pegar a pistola: vai para o coldre
 	await _approach(Vector3(2.5, 0.1, -15.3))
-	await _tap_action("interact")
-	await _frames(3)
+	await _pickup_wait()
 	var pistol := inv.equipped(ItemData.Slot.SIDEARM)
 	_check("Pistola vai para o coldre", pistol != null and pistol.item_id == &"pistol")
 	var pistol_node := animator.weapon_node(ItemData.Slot.SIDEARM)
@@ -479,9 +583,14 @@ func _index_of(id: StringName) -> int:
 	return -1
 
 
+func _pickup_wait() -> void:
+	await _tap_action("interact")
+	await get_tree().create_timer(1.0).timeout
+
+
 func _count_pickups() -> int:
 	var n := 0
-	for node in _player.get_parent().find_children("*", "Area3D", true, false):
+	for node in _player.get_parent().find_children("*", "RigidBody3D", true, false):
 		if node is ItemPickup and not node.is_queued_for_deletion():
 			n += 1
 	return n

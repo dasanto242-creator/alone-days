@@ -335,7 +335,7 @@ def locomotion(rig, name, g):
         rig.pelvis(Vector((-g.sway * math.cos(2 * math.pi * p), 0, z)),
                    yaw=-g.pelvis_yaw * s, roll=g.pelvis_roll * math.sin(2 * math.pi * p + 0.6))
         rig.torso(lean=g.lean + g.impact * 4 * imp, yaw=g.pelvis_yaw * 1.4 * s, roll=-g.pelvis_roll * 0.4 * s)
-        rig.head(pitch=-g.lean * 0.55 + g.impact * 2.0 * imp, yaw=-g.pelvis_yaw * 0.2 * s)
+        rig.head(pitch=3 + 0.4 * g.lean + g.impact * 2.0 * imp, yaw=-g.pelvis_yaw * 0.2 * s)
         # direção do passo no mundo da armadura (frente = -Y, direita = -X)
         move = Vector((-g.dir_x, -g.dir_y, 0.0))
         targets = {}
@@ -355,22 +355,52 @@ def locomotion(rig, name, g):
         for side in ("R", "L"):
             rig.foot(side, targets[side][0], targets[side][1], yaw=-g.pelvis_yaw * 0.3 * s)
         for side, sign in (("L", 1.0), ("R", -1.0)):
-            arm_cycle(rig, side, g, sign * s, imp)
+            arm_cycle(rig, side, g, p, sign, imp)
         rig.shoulders(raise_l=1.5 * imp * g.impact, raise_r=1.5 * imp * g.impact, fwd_l=3 * s, fwd_r=-3 * s)
         rig.key(f)
     finish(rig, act)
 
 
-def arm_cycle(rig, side, g, swing, imp):
+def arm_pendulum(rig, side, swing_deg, elbow_deg, out=0.06, inward=0.0, fist=0.2, palm_in=True):
+    """Braço pendurado como pêndulo: ângulo do braço (frente +) e dobra do cotovelo, em graus.
+    Calcula onde a mão fica e deixa a IK resolver; a palma fica virada para a coxa."""
+    a = rig.arm_rest[side]
     sx = 1.0 if side == "L" else -1.0
     sh = rig.shoulder_pos(side)
-    t = 0.5 + 0.5 * swing  # 0 = atrás, 1 = à frente
-    if g.arm_mode == "walk":
-        ang = math.radians(-g.arm_amp + 2 * g.arm_amp * t + 4)
-        local = Vector((sx * 0.05, math.sin(ang) * -0.56, -math.cos(ang) * 0.56))
-        rig.hand(side, sh + rig.chest_vec(Vector((local.x, local.y, local.z))), fist=0.3)
+    # referencial do peito: x esquerda, y trás, z cima (frente = -y)
+    def dir_at(deg):
+        r = math.radians(deg)
+        return rig.chest_vec(Vector((0.0, -math.sin(r), -math.cos(r))))
+    lateral = rig.chest_vec(Vector((sx, 0, 0)))
+    upper = (dir_at(swing_deg) + lateral * out).normalized()
+    elbow = sh + upper * a["l1"]
+    fore = (dir_at(swing_deg + elbow_deg) + lateral * (out * 0.5 - inward)).normalized()
+    grip = elbow + fore * (a["l2"] + 0.07)
+    thumb = rig.chest_vec(Vector((-sx * 0.25, -1.0, 0.0))) if palm_in else None
+    pole = rig.chest_vec(Vector((sx * 0.3, 1.0, 0.0)))
+    if thumb is not None:
+        rig.hand(side, grip, fwd=fore, thumb=thumb, pole=pole, fist=fist)
     else:
-        # cotovelo ~90° colado ao corpo; mão vai do quadril (atrás) até a altura do peito (frente)
+        rig.hand(side, grip, pole=pole, fist=fist)
+
+
+def arm_cycle(rig, side, g, p, sign, imp):
+    """Braços opostos às pernas, com atraso (o braço é arrastado pelo ombro, não dirigido)."""
+    lag = 0.07 if g.arm_mode != "run" else 0.04
+    swing = sign * math.sin(2 * math.pi * (p - lag))        # +1: braço à frente
+    if g.arm_mode == "walk":
+        fwd = max(swing, 0.0)
+        rig_deg = 4 + g.arm_amp * swing
+        elbow = 10 + 22 * fwd + 4 * math.sin(2 * math.pi * (p - lag - 0.1))
+        arm_pendulum(rig, side, rig_deg, elbow, out=0.07, inward=0.06 * fwd, fist=0.18)
+    elif g.arm_mode == "crouch":
+        # braços à frente e afastados para equilíbrio, balanço curto
+        arm_pendulum(rig, side, 28 + 9 * swing, 48 + 8 * max(swing, 0.0), out=0.16, inward=0.05, fist=0.35)
+    else:
+        # corrida: cotovelo ~90° colado ao corpo; mão vai do quadril (atrás) até a altura do peito (frente)
+        sx = 1.0 if side == "L" else -1.0
+        sh = rig.shoulder_pos(side)
+        t = 0.5 + 0.5 * swing
         amp = g.arm_amp
         back = Vector((sx * 0.02, 0.16 * amp, -0.42))
         front = Vector((-sx * 0.08, -0.26 * amp, -0.2 - 0.06 * (amp - 1)))
@@ -395,8 +425,7 @@ def idle(rig):
         rig.foot("R", Vector((-0.12, 0.05, rig.ground_ankle)), yaw=-10)
         for side in ("L", "R"):
             sx = 1.0 if side == "L" else -1.0
-            grip = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.07, -0.06, -0.58 + 0.005 * breath)))
-            rig.hand(side, grip, fist=0.25)
+            arm_pendulum(rig, side, 3 + 1.5 * breath + sx * b, 14 + sx * 3, out=0.08, fist=0.22)
         rig.shoulders(raise_l=0.8 * breath, raise_r=0.8 * breath)
         rig.key(f)
     finish(rig, act)
@@ -416,7 +445,8 @@ def crouch_idle(rig):
         rig.foot("R", Vector((-0.15, 0.12, rig.ground_ankle + 0.05)), pitch=-30, yaw=-8)
         for side in ("L", "R"):
             sx = 1.0 if side == "L" else -1.0
-            rig.hand(side, rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.02, -0.28, -0.4))), fist=0.4)
+            # um antebraço apoiado sobre o joelho, o outro solto à frente
+            arm_pendulum(rig, side, 32 + 4 * b * sx, 55 if side == "L" else 40, out=0.15, inward=0.04, fist=0.35)
         rig.key(f)
     finish(rig, act)
 
@@ -581,6 +611,67 @@ def reload_pistol(rig):
     finish(rig, act, cyclic=False)
 
 
+# ---------------------------------------------------------------- ações do dia a dia
+
+def mouth_pos(rig, forward=0.1):
+    return rig.pos("head") + rig.world("head") @ Vector((0.0, -forward, 0.035))
+
+
+def consume_anim(rig, name, frames, keys):
+    """Leva o item à boca. keys: (quadro, 0..1 = quanto a mão está na boca, inclinação da cabeça, inclinação do item)."""
+    act = new_action(rig, name, frames)
+    for f, t, head_tilt, item_tilt in keys:
+        rig.begin()
+        rig.pelvis(Vector((0, 0, -0.025)))
+        rig.torso(lean=2 - head_tilt * 0.15)
+        rig.head(pitch=-head_tilt)
+        rig.foot("L", Vector((0.12, -0.04, rig.ground_ankle)), yaw=8)
+        rig.foot("R", Vector((-0.12, 0.05, rig.ground_ankle)), yaw=-10)
+        arm_pendulum(rig, "L", 4, 14, out=0.08, fist=0.22)
+        rest = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.05, -0.28, -0.42)))
+        at_mouth = mouth_pos(rig) + rig.chest_vec(Vector((-0.02, -0.02, -0.03)))
+        grip = rest.lerp(at_mouth, smooth(t))
+        # item em pé na mão; ao beber inclina com o topo para a boca
+        up = rig.chest_vec(Vector((0.0, item_tilt, 1.0)))
+        rig.hand("R", grip, fwd=rig.chest_vec(Vector((0.0, -1.0, 0.2))), thumb=up, fist=0.85)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def drink(rig):
+    consume_anim(rig, "drink", 48, [
+        (0, 0.0, 0, 0.0), (10, 1.0, 10, 0.4), (16, 1.0, 20, 1.1), (34, 1.0, 22, 1.2),
+        (40, 0.9, 8, 0.4), (48, 0.0, 0, 0.0)])
+
+
+def eat(rig):
+    consume_anim(rig, "eat", 48, [
+        (0, 0.0, 0, 0.0), (9, 1.0, -6, 0.2), (14, 0.75, -4, 0.1), (19, 1.0, -6, 0.2),
+        (25, 0.75, -4, 0.1), (31, 1.0, -6, 0.2), (40, 0.5, 0, 0.0), (48, 0.0, 0, 0.0)])
+
+
+def pickup(rig):
+    """Agacha dobrando os joelhos, alcança o chão à frente com a mão direita e levanta."""
+    act = new_action(rig, "pickup", 33)
+    keys = [  # quadro, queda do quadril, inclinação do tronco, mão (0 = solta, 1 = no chão), mão fechada
+        (0, 0.03, 3, 0.0, 0.2), (8, 0.36, 36, 0.6, 0.2), (13, 0.52, 50, 1.0, 0.3),
+        (17, 0.52, 50, 1.0, 0.9), (25, 0.25, 22, 0.4, 0.9), (33, 0.03, 3, 0.0, 0.3)]
+    for f, drop, lean, reach, fist in keys:
+        rig.begin()
+        rig.pelvis(Vector((0, 0.1 * drop / 0.52, -drop)), pitch=lean * 0.3)
+        rig.torso(lean=lean)
+        rig.head(pitch=lean * 0.5)
+        rig.foot("L", Vector((0.15, -0.12, rig.ground_ankle)), yaw=10)
+        rig.foot("R", Vector((-0.15, 0.14, rig.ground_ankle + 0.05 * drop / 0.52)), pitch=-35 * drop / 0.52, yaw=-12)
+        ground = Vector((-0.1, -0.42, 0.12))
+        rest = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.05, -0.05, -0.56)))
+        grip = rest.lerp(ground, smooth(reach))
+        rig.hand("R", grip, fist=fist)
+        arm_pendulum(rig, "L", 15 + 25 * reach, 30 + 30 * reach, out=0.12, fist=0.3)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
 def create_all(arm):
     bpy.context.scene.render.fps = FPS
     rig = Rig(arm)
@@ -588,7 +679,7 @@ def create_all(arm):
     idle(rig)
     #                      ciclo passada apoio elev. larg. queda bob  fase  incl. q.yaw q.roll sway impacto braço amp
     locomotion(rig, "walk", Gait(1.05, (0.4, 0.45), 0.62, 0.1, 0.09, 0.035, 0.018, math.pi, 4, 5, 3, 0.02, 0.3,
-                                 "walk", 18, heel=14, toe_off=20))
+                                 "walk", 20, heel=14, toe_off=20))
     locomotion(rig, "run", Gait(0.7, (0.3, 0.6), 0.36, 0.32, 0.06, 0.07, 0.035, 0.0, 10, 8, 4, 0.012, 1.0,
                                 "run", 1.0, heel=6, toe_off=30, knee_kick=0.1))
     locomotion(rig, "sprint", Gait(0.6, (0.32, 0.72), 0.3, 0.45, 0.05, 0.095, 0.045, 0.0, 16, 10, 4, 0.008, 1.2,
@@ -606,7 +697,7 @@ def create_all(arm):
                                      "run", 0.7, heel=4, toe_off=15, direction=(0.0, -1.0)))
     crouch_idle(rig)
     locomotion(rig, "crouch_walk", Gait(1.2, (0.35, 0.35), 0.66, 0.08, 0.13, 0.42, 0.012, math.pi, 26, 6, 3, 0.02, 0.2,
-                                        "walk", 14, heel=8, toe_off=15))
+                                        "crouch", 9, heel=8, toe_off=15))
     jump(rig)
     death(rig)
     hold_melee(rig)
@@ -614,6 +705,9 @@ def create_all(arm):
     hold_pistol(rig)
     fire_pistol(rig)
     reload_pistol(rig)
+    drink(rig)
+    eat(rig)
+    pickup(rig)
     for pb in rig.pb:
         pb.rotation_quaternion = Quaternion()
         pb.location = Vector()

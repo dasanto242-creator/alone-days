@@ -5,18 +5,18 @@
 [sub_resource type="SphereShape3D" id="SphereShape3D_lih4b"]
 radius = 0.2
 
-[node name="CameraRig" type="Node3D" unique_id=831084195]
+[node name="CameraRig" type="Node3D" unique_id=1631344768]
 script = ExtResource("1_asq2o")
 
-[node name="Yaw" type="Node3D" parent="." unique_id=1119001339]
+[node name="Yaw" type="Node3D" parent="." unique_id=1079837108]
 
-[node name="Pitch" type="Node3D" parent="Yaw" unique_id=1214952438]
+[node name="Pitch" type="Node3D" parent="Yaw" unique_id=1288380198]
 
-[node name="SpringArm3D" type="SpringArm3D" parent="Yaw/Pitch" unique_id=530384074]
+[node name="SpringArm3D" type="SpringArm3D" parent="Yaw/Pitch" unique_id=55950063]
 shape = SubResource("SphereShape3D_lih4b")
 spring_length = 3.6
 margin = 0.15
 
-[node name="Camera3D" type="Camera3D" parent="Yaw/Pitch/SpringArm3D" unique_id=1509251539]
+[node name="Camera3D" type="Camera3D" parent="Yaw/Pitch/SpringArm3D" unique_id=232069890]
 fov = 68.0
 far = 350.0

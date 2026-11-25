@@ -27,3 +27,9 @@ signal weapon_state_changed(kind: int, ammo_text: String, has_weapons: bool)
 
 ## Algo foi atingido por um ataque (para efeitos e testes).
 signal hit_landed(target: Node, amount: float, point: Vector3)
+
+## Barulho no mundo (passos, tiros, golpes). Zumbis dentro do raio (m) ouvem e vão investigar.
+signal noise_emitted(position: Vector3, radius: float, source: Node)
+
+## O jogador levou dano (para o flash vermelho na tela).
+signal player_damaged(amount: float)

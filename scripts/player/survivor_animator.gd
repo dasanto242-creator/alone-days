@@ -7,6 +7,7 @@ extends Node3D
 ##      A velocidade de reprodução acompanha a velocidade real (pés não deslizam).
 ##   2. Segurar arma (só tronco e braços): hold_melee / hold_pistol.
 ##   3. Ação (one-shot, tronco e braços): golpe, disparo, recarga.
+##   4. Uso (one-shot, corpo inteiro): beber, comer, pegar do chão.
 
 ## Velocidade no chão (m/s) de cada ciclo: distância do pé no apoio / tempo de apoio.
 const NOMINAL_SPEED := {&"walk": 1.3, &"run": 3.57, &"sprint": 5.78, &"crouch_walk": 0.88}
@@ -22,6 +23,7 @@ const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouc
 	&"hold_melee", &"hold_pistol", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left", &"run_right"]
 const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol"]
 const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol"]
+const USES: Array[StringName] = [&"drink", &"eat", &"pickup"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
 	"lowerarm", "wrist", "finger"]
 const ACTION_BONES := ["spine04", "spine03"]
@@ -46,6 +48,10 @@ var _weapon_nodes := {}   # slot -> Node3D
 var _weapon_ids := {}     # slot -> StringName
 var _flash_timer := 0.0
 var _shirt: Node3D
+var _prop: Node3D
+var _prop_show_at := -1.0
+var _prop_hide_at := -1.0
+var _use_time := 0.0
 
 
 func _ready() -> void:
@@ -78,6 +84,12 @@ func _process(delta: float) -> void:
 			var weapon: Node3D = _weapon_nodes.get(ItemData.Slot.SIDEARM)
 			if weapon and weapon.has_node("Flash"):
 				(weapon.get_node("Flash") as Node3D).visible = false
+	if _prop:
+		_use_time += delta
+		_prop.visible = _use_time >= _prop_show_at and _use_time < _prop_hide_at
+		if _use_time >= _prop_hide_at:
+			_prop.queue_free()
+			_prop = null
 	_hold_amount = move_toward(_hold_amount, _hold_target, delta * 5.0)
 	_tree.set("parameters/hold/blend_amount", _hold_amount)
 
@@ -154,6 +166,62 @@ func play_action(action: StringName) -> void:
 	_tree.set("parameters/action/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
+## Animação de corpo inteiro (beber, comer, pegar). Mostra o item na mão direita entre
+## show_from e show_until (segundos). Devolve a duração da animação.
+func play_use(anim_name: StringName, item: ItemData = null, show_from := 0.0, show_until := -1.0) -> float:
+	if _dead or not _anim.has_animation(anim_name):
+		return 0.0
+	var length := _anim.get_animation(anim_name).length
+	_tree.set("parameters/use_kind/transition_request", String(anim_name))
+	_tree.set("parameters/use/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+	if _prop:
+		_prop.queue_free()
+		_prop = null
+	var hand := _sockets.get("Socket_Hand_R") as Node3D
+	if item and hand:
+		_prop = _make_prop(item)
+		hand.add_child(_prop)
+		_use_time = 0.0
+		_prop_show_at = show_from
+		_prop_hide_at = length - 0.15 if show_until < 0.0 else show_until
+		_prop.visible = false
+	return length
+
+
+func is_using() -> bool:
+	return bool(_tree.get("parameters/use/active"))
+
+
+## Modelo do item segurado na mão (o eixo +Y da mão é o do polegar: o item fica "em pé").
+func _make_prop(d: ItemData) -> Node3D:
+	if d.model:
+		var m := d.model.instantiate() as Node3D
+		for g in m.find_children("*", "GeometryInstance3D", true, false):
+			(g as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		return m
+	var mi := MeshInstance3D.new()
+	var size := d.world_size
+	match d.world_shape:
+		ItemData.WorldShape.CYLINDER:
+			var c := CylinderMesh.new()
+			c.top_radius = size.x * 0.5
+			c.bottom_radius = size.x * 0.5
+			c.height = size.y
+			c.radial_segments = 10
+			mi.mesh = c
+		_:
+			var b := BoxMesh.new()
+			b.size = Vector3(minf(size.x, 0.1), minf(size.y, 0.16), minf(size.z, 0.1))
+			mi.mesh = b
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = d.world_color
+	mat.roughness = 0.6
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(0, 0.02, -0.02)
+	return mi
+
+
 func muzzle_flash() -> void:
 	var weapon: Node3D = _weapon_nodes.get(ItemData.Slot.SIDEARM)
 	if weapon == null:
@@ -197,6 +265,7 @@ func _attach_flash(weapon: Node3D) -> void:
 func play_death() -> void:
 	_dead = true
 	_hold_target = 0.0
+	_tree.set("parameters/use/request", AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
 	_tree.set("parameters/loco_speed/scale", 1.0)
 	_set_loco(&"death")
 
@@ -274,7 +343,14 @@ func _build_tree() -> void:
 	bt.add_node("action", action)
 	bt.connect_node("action", 0, "hold")
 	bt.connect_node("action", 1, "action_kind")
-	bt.connect_node("output", 0, "action")
+	_transition(bt, "use_kind", USES, 0.0)
+	var use := AnimationNodeOneShot.new()
+	use.fadein_time = 0.2
+	use.fadeout_time = 0.3
+	bt.add_node("use", use)
+	bt.connect_node("use", 0, "action")
+	bt.connect_node("use", 1, "use_kind")
+	bt.connect_node("output", 0, "use")
 	_tree = AnimationTree.new()
 	_tree.name = "AnimationTree"
 	_tree.tree_root = bt

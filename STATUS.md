@@ -63,6 +63,26 @@
   MultiMesh, materiais compartilhados, clarão/marcas de tiro reaproveitados, sombras desligadas em
   peças pequenas, camiseta não é desenhada sob a jaqueta.
 
+## Ajustes de 25/11 (2) — braços, ações, física e primeiro zumbi
+- Braços na caminhada viraram pêndulos com atraso: o braço é arrastado pelo ombro, o cotovelo dobra
+  mais no avanço e a mão relaxada cruza um pouco à frente. Agachado: braços à frente para equilíbrio.
+- Novas animações de corpo inteiro: beber (leva a garrafa à boca e inclina a cabeça), comer (mordidas)
+  e pegar do chão (agacha, alcança, levanta). O item aparece na mão; o personagem não anda durante a
+  ação e a arma volta para a mão no fim. Ao pegar, ele dá um passo curto até o item.
+- Colisão: cápsula do corpo mais justa (raio 0,28 m), não atravessa zumbis.
+- Itens no chão agora têm física (RigidBody): caem, repousam em cima do que estiver embaixo, não
+  atravessam paredes ao serem largados e são empurrados de leve ao esbarrar.
+- **Zumbi** (Etapa 3 adiantada): modelo próprio (corpo magro, pele pálida, roupa rasgada e suja,
+  sangue na boca e na roupa, olhos opacos), andar lento mancando e torto, idle balançando, ataque,
+  reação a golpe e morte.
+  - IA: Idle, Patrol, Suspicious, Investigate, Alert, Chase, Attack, Search (+ Stagger, Dead).
+  - Sentidos: visão em cone com linha de visada (agachado é visto mais tarde e de mais perto) e
+    audição (passos: agachado 1,5 m, andando 4 m, correndo 9 m, sprint 16 m; tiro 45 m).
+  - Combate nos dois sentidos: armas causam dano (tiro na cabeça = triplo), zumbi agarra e morde
+    (14 de dano, tela pisca vermelho, vibração, empurrão).
+  - Desempenho: decisões em intervalos que crescem com a distância; longe (>85 m) fica congelado e
+    invisível. Máximo de 3 vivos no cenário de teste; corpos somem e novos nascem longe do jogador.
+
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).
 - ~22 mil triângulos, 67 ossos, texturas próprias comprimidas para celular.
@@ -72,7 +92,8 @@
 
 ## Próximos passos
 2. Sistema de salvamento (inventário e atributos já são serializáveis).
-3. Etapa 3 — Infectados: modelos, animações, IA, perseguição, ataque, dano.
+3. Etapa 3 — Infectados: variações de zumbi (roupas/corpos), navegação por NavMesh em mapas
+   grandes, sons (gemidos, passos), zumbis que quebram portas.
 
 ## Histórico de arquivos (Etapa 1)
 Todos novos: `project.godot`, `export_presets.cfg`, `icon.svg`, `.gitignore`,

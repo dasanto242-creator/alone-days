@@ -24,6 +24,9 @@ MH_DATA = sys.argv[-2] if len(sys.argv) > 2 else "/tmp/mh/makehuman/data"
 OUT = sys.argv[-1] if len(sys.argv) > 2 else os.path.join(HERE, "../../assets/models/survivor/survivor.glb")
 mats.MH_DATA = MH_DATA
 PREVIEW_ONLY = os.environ.get("PREVIEW_ONLY") == "1"
+# VARIANT=zombie gera o zumbi (mesmo esqueleto, corpo magro, roupa rasgada, sangue)
+ZOMBIE = os.environ.get("VARIANT") == "zombie"
+mats.ZOMBIE = ZOMBIE
 
 # ---------------------------------------------------------------- forma do corpo
 # Homem adulto (~25-35 anos), atlético, ~1,80 m, traços miscigenados.
@@ -35,6 +38,16 @@ BODY_TARGETS = [
     ("macrodetails/asian-male-young.target", 0.2),
     ("macrodetails/height/male-young-averagemuscle-averageweight-maxheight.target", 0.05),
 ]
+
+if ZOMBIE:
+    # Homem magro, definhado
+    BODY_TARGETS = [
+        ("macrodetails/universal-male-young-minmuscle-minweight.target", 0.8),
+        ("macrodetails/universal-male-young-averagemuscle-minweight.target", 0.2),
+        ("macrodetails/caucasian-male-young.target", 0.6),
+        ("macrodetails/african-male-young.target", 0.2),
+        ("macrodetails/asian-male-young.target", 0.2),
+    ]
 
 # Esqueleto de jogo: ossos mantidos (os demais são fundidos no ancestral mais próximo)
 KEEP = {"root", "spine05", "spine04", "spine03", "spine02", "spine01",
@@ -248,6 +261,8 @@ def build():
 
     covered = lambda fv: shirt_f(fv) or (pants_f(fv) and not shirt_f(fv)) or boots_f(fv) or beanie_f(fv) or \
         all(region[v] == "TORSO" for v in fv) or all(region[v] in ("HIP", "THIGH") for v in fv)
+    if ZOMBIE:
+        return build_zombie(base, skel, weights, region, z_shift, zc, j, shirt_f, pants_f, boot_top)
     # Corpo visível: cabeça, pescoço, braços e mãos (o resto fica sob roupa)
     body, body_used = body_submesh(base, lambda fv: not covered(fv), z_shift, weights, "Body")
     mats.paint_skin_features(body, body_used, base, skel, j)
@@ -302,6 +317,82 @@ def build():
     if not PREVIEW_ONLY:
         anims.create_all(arm)
     export(OUT)
+
+
+def build_zombie(base, skel, weights, region, z_shift, zc, j, shirt_f, pants_f, boot_top):
+    """Zumbi: corpo inteiro (aparece pelos rasgos), camisa e calça rasgadas, botas gastas."""
+    in_boot = lambda fv: all(region[v] == "FOOT" or (region[v] == "SHIN" and zc(v) < boot_top - 0.02) for v in fv)
+    body, body_used = body_submesh(base, lambda fv: not in_boot(fv), z_shift, weights, "Body")
+    mats.paint_skin_features(body, body_used, base, skel, j)
+    shirt, _ = body_submesh(base, shirt_f, z_shift, weights, "Shirt")
+    inflate(shirt, 0.012, 3)
+    relax_boundary(shirt, 6)
+    pants, _ = body_submesh(base, lambda fv: pants_f(fv) and not all(zc(v) < boot_top - 0.04 for v in fv),
+                            z_shift, weights, "Pants")
+    inflate(pants, 0.018, 10)
+    relax_boundary(pants, 8)
+    # rasgos: buracos aleatórios + barras esfarrapadas
+    tear(shirt, seed=3, holes=0.12, hem_z=j("spine04____head").z - 0.02, ragged=0.06)
+    tear(pants, seed=11, holes=0.12, hem_z=j("lowerleg01.L____head").z - 0.1, ragged=0.09)
+    boots = build_boots(base, region, weights, z_shift, boot_top)
+    eyes = build_eyes(base, z_shift, skel)
+    for ob, ratio in ((body, 0.4), (shirt, 0.5), (pants, 0.5)):
+        decimate(ob, ratio)
+    for ob, th in ((pants, 0.004), (shirt, 0.003)):
+        solidify(ob, th)
+    arm = build_armature(skel, z_shift)
+    meshes = [body, shirt, pants, boots] + eyes
+    mats.apply_all(meshes, base, region)
+    for ob in meshes:
+        ob.parent = arm
+        mod = ob.modifiers.new("Armature", "ARMATURE")
+        mod.object = arm
+    total = sum(tri_count(ob) for ob in meshes)
+    print(f"  TOTAL      {total:6d} triângulos")
+    if not PREVIEW_ONLY:
+        import zombie_anims
+        zombie_anims.create_all(arm)
+    export(OUT)
+
+
+def tear(ob, seed, holes, hem_z, ragged):
+    """Remove faces onde um ruído 3D passa do limiar (buracos) e recorta a barra em zigue-zague."""
+    from mathutils import noise
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    off = Vector((seed * 7.31, seed * 3.17, seed * 1.93))
+    kill = []
+    for f in bm.faces:
+        c = f.calc_center_median()
+        n = noise.noise((c + off) * 9.0) + 0.5 * noise.noise((c + off) * 23.0)
+        if n > 0.62 - holes * 2.0:
+            kill.append(f)
+            continue
+        # barra esfarrapada: altura de corte varia ao redor do corpo
+        edge = hem_z + ragged * (0.5 + 0.5 * noise.noise(Vector((c.x * 25.0, c.y * 25.0, seed))))
+        if c.z < edge:
+            kill.append(f)
+    bmesh.ops.delete(bm, geom=kill, context="FACES")
+    # remove pedacinhos soltos (ilhas pequenas)
+    seen = set()
+    for f in list(bm.faces):
+        if f in seen or not f.is_valid:
+            continue
+        island, stack = [], [f]
+        seen.add(f)
+        while stack:
+            g = stack.pop()
+            island.append(g)
+            for e in g.edges:
+                for h in e.link_faces:
+                    if h not in seen:
+                        seen.add(h)
+                        stack.append(h)
+        if len(island) < 12:
+            bmesh.ops.delete(bm, geom=island, context="FACES")
+    bm.to_mesh(ob.data)
+    bm.free()
+    relax_boundary(ob, 3, 0.3)
 
 
 def flatten_soles(ob):

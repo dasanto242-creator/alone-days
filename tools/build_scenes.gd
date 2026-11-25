@@ -10,12 +10,15 @@ const HUD_SCENE := "res://scenes/ui/hud.tscn"
 const SANDBOX_SCENE := "res://scenes/world/test_sandbox.tscn"
 const PICKUP_SCENE := "res://scenes/world/item_pickup.tscn"
 const SURVIVOR_MODEL := "res://assets/models/survivor/survivor.glb"
+const ZOMBIE_MODEL := "res://assets/models/zombie/zombie.glb"
+const ZOMBIE_SCENE := "res://scenes/characters/zombie.tscn"
 const CATALOG_PATH := "res://data/item_catalog.tres"
 
 const LAYER_WORLD := 1
 const LAYER_PLAYER := 2
 const LAYER_INTERACTABLE := 4
 const LAYER_TRIGGER := 8
+const LAYER_ENEMY := 16
 
 var _materials := {}
 
@@ -25,6 +28,8 @@ func _ready() -> void:
 	ok = _build_items() and ok
 	ok = _save(_build_pickup(), PICKUP_SCENE) and ok
 	ok = _save(_build_player(), PLAYER_SCENE) and ok
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://scenes/characters"))
+	ok = _save(_build_zombie(), ZOMBIE_SCENE) and ok
 	ok = _save(_build_camera_rig(), CAMERA_SCENE) and ok
 	ok = _save(_build_hud(), HUD_SCENE) and ok
 	ok = _save(_build_sandbox(), SANDBOX_SCENE) and ok
@@ -113,12 +118,13 @@ func _block(parent: Node, node_name: String, size: Vector3, pos: Vector3, color:
 func _build_player() -> Node:
 	var player := _node(CharacterBody3D, "Player", null, "res://scripts/player/player_controller.gd") as CharacterBody3D
 	player.collision_layer = LAYER_PLAYER
-	player.collision_mask = LAYER_WORLD
+	player.collision_mask = LAYER_WORLD | LAYER_ENEMY  # não atravessa zumbis
 	player.floor_max_angle = deg_to_rad(46.0)
 	player.floor_snap_length = 0.35
 
+	# cápsula justa ao corpo (ombros ~0,45 m): encosta de verdade em paredes e objetos
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.35
+	capsule.radius = 0.28
 	capsule.height = 1.8
 	var col := _node(CollisionShape3D, "CollisionShape3D", player) as CollisionShape3D
 	col.shape = capsule
@@ -147,6 +153,27 @@ func _build_player() -> Node:
 	return player
 
 
+# ---------------------------------------------------------------- zumbi
+
+func _build_zombie() -> Node:
+	var z := _node(CharacterBody3D, "Zombie", null, "res://scripts/ai/zombie.gd") as CharacterBody3D
+	z.collision_layer = LAYER_ENEMY
+	z.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_ENEMY
+	z.floor_snap_length = 0.3
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.28
+	capsule.height = 1.75
+	var col := _node(CollisionShape3D, "CollisionShape3D", z) as CollisionShape3D
+	col.shape = capsule
+	col.position.y = 0.875
+	var visual := _node(Node3D, "Visual", z)
+	var model := (load(ZOMBIE_MODEL) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
+	model.name = "Model"
+	model.rotation_degrees.y = 180.0
+	visual.add_child(model)
+	return z
+
+
 # ---------------------------------------------------------------- câmera
 
 func _build_camera_rig() -> Node:
@@ -171,6 +198,11 @@ func _build_camera_rig() -> Node:
 
 func _build_hud() -> Node:
 	var hud := _node(CanvasLayer, "HUD", null) as CanvasLayer
+
+	# flash vermelho ao levar dano (atrás dos controles, não bloqueia toques)
+	var flash := _node(ColorRect, "DamageFlash", hud, "res://scripts/ui/damage_flash.gd") as ColorRect
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var controls := _node(Control, "MobileControls", hud, "res://scripts/input/mobile_controls.gd") as Control
 	controls.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -307,6 +339,7 @@ func _build_sandbox() -> Node:
 	_build_props(root)
 	_build_trees(root)
 	_build_loot(root)
+	_build_zombies(root)
 
 	var player := (load(PLAYER_SCENE) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
 	root.add_child(player)
@@ -576,16 +609,23 @@ func _build_items() -> bool:
 
 
 func _build_pickup() -> Node:
-	return _node(Area3D, "ItemPickup", null, "res://scripts/world/item_pickup.gd")
+	return _node(RigidBody3D, "ItemPickup", null, "res://scripts/world/item_pickup.gd")
 
 
 func _pickup(parent: Node, id: String, pos: Vector3, qty := 1) -> void:
 	var p := (load(PICKUP_SCENE) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
 	p.name = "%s_%d" % [id, parent.get_child_count()]
 	parent.add_child(p)
-	p.position = pos
+	p.position = pos + Vector3.UP * 0.06  # nasce um pouco acima e assenta com a física
 	p.set("item_id", StringName(id))
 	p.set("quantity", qty)
+
+
+func _build_zombies(root: Node) -> void:
+	var spawner := _node(Node3D, "ZombieSpawner", root, "res://scripts/ai/zombie_spawner.gd")
+	for i in 3:
+		var m := _node(Marker3D, "Spawn%d" % i, spawner) as Marker3D
+		m.position = [Vector3(20, 0, -6), Vector3(-22, 0, -22), Vector3(14, 0, 24)][i]
 
 
 func _build_loot(root: Node) -> void:

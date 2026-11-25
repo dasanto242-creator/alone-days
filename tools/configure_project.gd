@@ -47,6 +47,7 @@ func _init() -> void:
 	s.set_setting("layer_names/3d_physics/layer_2", "player")
 	s.set_setting("layer_names/3d_physics/layer_3", "interactable")
 	s.set_setting("layer_names/3d_physics/layer_4", "trigger")
+	s.set_setting("layer_names/3d_physics/layer_5", "enemy")
 
 	# Ações (teclado para testar no PC; no celular os controles touch acionam as mesmas)
 	_action("move_forward", [KEY_W, KEY_UP], 0.05)

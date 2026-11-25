@@ -44,6 +44,16 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _focused_interactable: Node = null
 var _last_prompt := ""
 var _idle_time := 0.0
+## Segundos restantes de uma ação de corpo inteiro (beber, comer, pegar): sem andar nem atacar.
+var _busy := 0.0
+var _noise_timer := 0.0
+var _pending_pickup: Node = null
+var _pickup_timer := -1.0
+## Arma que estava na mão antes de beber/comer/pegar: volta para a mão no fim da ação.
+var _rewield_slot := -1
+
+## Raio (m) do barulho dos passos em cada postura: zumbis dentro dele ouvem.
+const STEP_NOISE := {"crouch": 1.5, "walk": 4.0, "jog": 9.0, "sprint": 16.0}
 
 @onready var stats: SurvivalStats = $Survival
 @onready var _collision: CollisionShape3D = $CollisionShape3D
@@ -65,9 +75,13 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_handle_actions()
+	_update_busy(delta)
+	if _busy <= 0.0:
+		_handle_actions()
 
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back", 0.05)
+	if _busy > 0.0 or stats.is_dead:
+		input = Vector2.ZERO
 	var strength := minf(input.length(), 1.0)
 	var yaw := _camera_rig.get_yaw() if _camera_rig else 0.0
 	var direction := Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, yaw)
@@ -83,6 +97,13 @@ func _physics_process(delta: float) -> void:
 		Events.notify.emit("Sem fôlego")
 
 	var target_velocity := direction * _target_speed(strength) * _direction_factor(direction)
+	# ao pegar algo um pouco longe, dá um passo curto até o item enquanto abaixa
+	if _pending_pickup and is_instance_valid(_pending_pickup) and _pickup_timer > 0.12:
+		var to := (_pending_pickup as Node3D).global_position - global_position
+		to.y = 0.0
+		var gap := to.length() - 0.5
+		if gap > 0.05:
+			target_velocity = to.normalized() * minf(gap / 0.3, 1.6)
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
 	var rate := acceleration if target_velocity.length_squared() > 0.0 else deceleration
 	if not is_on_floor():
@@ -108,8 +129,82 @@ func _physics_process(delta: float) -> void:
 
 	var ground_speed := Vector2(velocity.x, velocity.z).length()
 	stats.tick(delta, _exertion(ground_speed))
+	_emit_step_noise(delta, ground_speed)
 	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta, _local_move_dir())
 	_update_interaction_focus()
+
+
+## Guarda a arma durante a ação (mão livre) e lembra qual era para devolver depois.
+func _lower_weapon() -> void:
+	var weapons := get_node_or_null("Weapons") as WeaponHandler
+	if weapons and weapons.wielded_slot != -1:
+		_rewield_slot = weapons.wielded_slot
+		weapons.set_wielded(-1)
+
+
+func is_busy() -> bool:
+	return _busy > 0.0
+
+
+func _update_busy(delta: float) -> void:
+	var was_busy := _busy > 0.0
+	_busy = maxf(_busy - delta, 0.0)
+	if was_busy and _busy <= 0.0 and _rewield_slot != -1:
+		var weapons := get_node_or_null("Weapons") as WeaponHandler
+		if weapons and inventory.equipped(_rewield_slot) != null and weapons.wielded_slot == -1:
+			weapons.set_wielded(_rewield_slot)
+		_rewield_slot = -1
+	if _pickup_timer >= 0.0:
+		_pickup_timer -= delta
+		if _pickup_timer < 0.0:
+			if is_instance_valid(_pending_pickup) and not _pending_pickup.is_queued_for_deletion() \
+					and not stats.is_dead:
+				_pending_pickup.collect(self)
+			_pending_pickup = null
+
+
+## Passos fazem barulho conforme a postura (agachado quase não se ouve).
+func _emit_step_noise(delta: float, ground_speed: float) -> void:
+	_noise_timer -= delta
+	if _noise_timer > 0.0 or ground_speed < 0.3 or not is_on_floor():
+		return
+	_noise_timer = 0.5
+	var key := "crouch" if is_crouching else ("sprint" if ground_speed > 4.7 else ("jog" if ground_speed > 2.4 else "walk"))
+	Events.noise_emitted.emit(global_position, STEP_NOISE[key], self)
+
+
+## Ataque recebido (ex.: zumbi). Flash vermelho, vibração e um tranco na câmera.
+func take_hit(amount: float, from: Node3D = null) -> void:
+	if stats.is_dead:
+		return
+	stats.apply_damage(amount)
+	Events.player_damaged.emit(amount)
+	GameSettings.vibrate(120, 1.0)
+	if _camera_rig:
+		_camera_rig.add_recoil(2.5)
+	if from and not stats.is_dead:
+		var push := global_position - from.global_position
+		push.y = 0.0
+		if push.length_squared() > 0.001:
+			velocity += push.normalized() * 2.5
+
+
+## Agacha, pega o item do chão e levanta. O item entra no inventário quando a mão o alcança.
+func begin_pickup(pickup: Node3D) -> void:
+	if _busy > 0.0 or stats.is_dead or _pending_pickup != null:
+		return
+	_lower_weapon()
+	_set_sprinting(false)
+	var to := pickup.global_position - global_position
+	to.y = 0.0
+	if to.length_squared() > 0.01:
+		_visual.rotation.y = atan2(-to.x, -to.z)
+	var d := Items.get_item(pickup.get("item_id"))
+	var length := _animator.play_use(&"pickup", d, 0.5)
+	_busy = maxf(length - 0.25, 0.5)
+	_pending_pickup = pickup
+	_pickup_timer = 0.48
+	velocity = Vector3(0, velocity.y, 0)
 
 
 ## Postura de combate: arma em mãos e sem estar em sprint (no sprint a arma abaixa e o corpo
@@ -330,9 +425,20 @@ func use_item(index: int) -> bool:
 	var d := inventory.stacks[index].data()
 	if d == null or not d.is_usable():
 		return false
+	if _busy > 0.0 or stats.is_dead:
+		return false
 	inventory.take_from(index, 1)
 	stats.consume(d)
 	Events.notify.emit("%s: %s" % [d.use_verb, d.display_name])
+	var anim := &""
+	if d.category == ItemData.Category.DRINK:
+		anim = &"drink"
+	elif d.category == ItemData.Category.FOOD:
+		anim = &"eat"
+	if anim != &"":
+		_lower_weapon()
+		_set_sprinting(false)
+		_busy = _animator.play_use(anim, d, 0.1)
 	return true
 
 
@@ -374,8 +480,17 @@ func drop_equipped(slot: int) -> bool:
 func _spawn_dropped(stack: ItemStack) -> void:
 	var forward := -_visual.global_basis.z
 	var offset := Vector3(randf_range(-0.25, 0.25), 0.0, randf_range(-0.25, 0.25))
-	var at := global_position + forward * 0.9 + offset + Vector3.UP * 0.02
-	ItemPickup.spawn(get_parent(), stack.item_id, stack.quantity, stack.durability, at)
+	var chest := global_position + Vector3.UP * 0.9
+	var at := chest + forward * 0.6 + offset
+	# não deixa o item atravessar parede/objeto à frente: para antes do obstáculo
+	var ray := PhysicsRayQueryParameters3D.create(chest, at + forward * 0.2, 1)
+	ray.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+	if not hit.is_empty():
+		at = chest + (hit.position - chest) * 0.6
+	# o item nasce na altura das mãos e cai com física até o chão (ou em cima de algo)
+	var pickup := ItemPickup.spawn(get_parent(), stack.item_id, stack.quantity, stack.durability, at)
+	pickup.linear_velocity = forward * 0.8 + velocity * 0.5
 	var d := stack.data()
 	if d:
 		Events.notify.emit("Largou %s" % d.display_name)

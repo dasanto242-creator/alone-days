@@ -68,7 +68,7 @@ func set_wielded(slot: int) -> void:
 
 func attack() -> void:
 	var d := wielded_data()
-	if d == null or _cooldown > 0.0 or _busy > 0.0:
+	if d == null or _cooldown > 0.0 or _busy > 0.0 or _player.is_busy():
 		return
 	if d.weapon_kind == ItemData.WeaponKind.MELEE:
 		_melee(d)
@@ -107,6 +107,7 @@ func _melee(d: ItemData) -> void:
 	_cooldown = d.attack_cooldown
 	_busy = d.attack_cooldown * 0.8
 	_player.animator().play_action(&"attack_melee")
+	Events.noise_emitted.emit(_player.global_position, 5.0, _player)
 	await get_tree().create_timer(MELEE_HIT_DELAY).timeout
 	if _player.stats.is_dead:
 		return
@@ -117,7 +118,7 @@ func _melee(d: ItemData) -> void:
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = shape
 	query.transform = Transform3D(Basis(), center)
-	query.collision_mask = 1 | 4
+	query.collision_mask = 1 | 4 | 16
 	query.exclude = [_player.get_rid()]
 	var hit_something := false
 	for result in _player.get_world_3d().direct_space_state.intersect_shape(query, 8):
@@ -154,13 +155,14 @@ func _shoot(d: ItemData) -> void:
 	_player.snap_to_camera()
 	_player.animator().play_action(&"fire_pistol")
 	_player.animator().muzzle_flash()
+	Events.noise_emitted.emit(_player.global_position, 45.0, _player)  # tiro: ouvido de longe
 	_player.camera_rig().add_recoil(1.6)
 	GameSettings.vibrate(18, 0.6)
 	# o tiro sai do centro da tela (mira), a partir da câmera
 	var cam := _player.get_viewport().get_camera_3d()
 	var from := cam.global_position
 	var dir := -cam.global_basis.z
-	var query := PhysicsRayQueryParameters3D.create(from, from + dir * d.attack_range, 1 | 4)
+	var query := PhysicsRayQueryParameters3D.create(from, from + dir * d.attack_range, 1 | 4 | 16)
 	query.exclude = [_player.get_rid()]
 	var hit := _player.get_world_3d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty():

@@ -17,6 +17,18 @@ BROWS = lin((0.17, 0.13, 0.1))
 STUBBLE = lin((0.38, 0.3, 0.25))
 HAIR = lin((0.13, 0.1, 0.08))
 
+ZOMBIE = False
+Z_SKIN = lin((0.5, 0.52, 0.44))      # pálida, acinzentada/esverdeada
+Z_LIPS = lin((0.3, 0.22, 0.24))
+BLOOD = lin((0.32, 0.03, 0.03))
+BLOOD_DRY = lin((0.16, 0.04, 0.03))
+
+Z_GARMENTS = {
+    "Shirt": (lin((0.55, 0.52, 0.45)), 0.9, "cotton", 600.0, 0.8, 1024),   # camiseta que já foi branca
+    "Pants": (lin((0.2, 0.24, 0.32)), 0.85, "twill", 700.0, 0.85, 1024),   # jeans
+    "Boots": (lin((0.18, 0.14, 0.1)), 0.6, "leather", 120.0, 0.7, 512),
+}
+
 GARMENTS = {
     #           cor base               rugosidade  padrão   escala  sujeira  textura
     "Jacket": (lin((0.33, 0.36, 0.24)), 0.85, "canvas", 900.0, 0.35, 1024),
@@ -43,7 +55,7 @@ def paint_skin_features(body, used, base, skel, joint):
     for li, vi in enumerate(used):
         co = body.data.vertices[li].co
         w = raw.get(vi, {})
-        color = Vector(SKIN)
+        color = Vector(Z_SKIN if ZOMBIE else SKIN)
         lips = sum(x for b, x in w.items() if b.startswith("oris"))
         stubble = w.get("jaw", 0.0) + w.get("special04", 0.0) * 0.5
         brow = 0.0
@@ -63,6 +75,23 @@ def paint_skin_features(body, used, base, skel, joint):
         if lips > 0.55:
             color = color.lerp(Vector(LIPS), min((lips - 0.55) * 1.5, 0.6))
         color = color.lerp(Vector(BROWS), min(brow * 1.2, 0.92))
+        if ZOMBIE:
+            # boca e queixo sujos de sangue, olheiras escuras, veias e hematomas
+            from mathutils import noise
+            mouth_w = lips + stubble * 0.8
+            drip = noise.noise(Vector((co.x * 60.0, co.y * 60.0, 3.0))) * 0.5 + 0.5
+            if mouth_w > 0.35:
+                color = color.lerp(Vector(BLOOD), min((mouth_w - 0.35) * 1.6 * (0.5 + drip), 0.92))
+            for e in eyes:
+                d = (Vector((co.x, co.y, co.z)) - e).length
+                if d < 0.035 and co.z < e.z:
+                    color = color.lerp(lin((0.22, 0.17, 0.2)), (1 - d / 0.035) * 0.75)
+            bruise = noise.noise(co * 14.0 + Vector((5.0, 1.0, 2.0)))
+            if bruise > 0.35:
+                color = color.lerp(lin((0.3, 0.3, 0.33)), min((bruise - 0.35) * 2.0, 0.55))
+            gash = noise.noise(co * 22.0 + Vector((9.0, 4.0, 7.0)))
+            if gash > 0.55:
+                color = color.lerp(Vector(BLOOD_DRY), min((gash - 0.55) * 4.0, 0.9))
         attr.data[li].color = (color.x, color.y, color.z, 1.0)
 
 
@@ -164,6 +193,14 @@ def _build_fabric(mat, color, roughness, kind, scale, dirt, zipper=False):
     col = _mix(nt, _math(nt, "MULTIPLY", weave, 0.08), col, (0.0, 0.0, 0.0))
     mud = lin((0.3, 0.26, 0.2))
     col = _mix(nt, _math(nt, "MULTIPLY", grime, dirt * 0.6), col, mud)
+    if ZOMBIE:
+        # manchas grandes de sangue seco + respingos de sangue mais vivo
+        stain = _math(nt, "GREATER_THAN", _noise(nt, vec, 4.0, 6.0, 0.7), 0.64)
+        splat = _math(nt, "GREATER_THAN", _noise(nt, vec, 25.0, 4.0, 0.6), 0.68)
+        col = _mix(nt, _math(nt, "MULTIPLY", stain, 0.85), col, BLOOD_DRY)
+        col = _mix(nt, _math(nt, "MULTIPLY", splat, 0.8), col, BLOOD)
+        soot = _math(nt, "GREATER_THAN", _noise(nt, vec, 11.0, 5.0, 0.6), 0.52)
+        col = _mix(nt, _math(nt, "MULTIPLY", soot, 0.5), col, lin((0.12, 0.1, 0.08)))
     if zipper:
         # zíper e vista: faixa escura vertical no centro da frente
         sep = nt.nodes.new("ShaderNodeSeparateXYZ")
@@ -194,7 +231,8 @@ def _build_skin(mat):
     vec = _coord(nt)
     blotch = _noise(nt, vec, 30.0, 4.0, 0.5)          # manchas avermelhadas
     pores = _noise(nt, vec, 900.0, 2.0, 0.5)          # poros
-    col = _mix(nt, _math(nt, "MULTIPLY", blotch, 0.08), attr.outputs["Color"], lin((0.7, 0.45, 0.4)), "MIX")
+    blot_col = lin((0.35, 0.38, 0.4)) if ZOMBIE else lin((0.7, 0.45, 0.4))
+    col = _mix(nt, _math(nt, "MULTIPLY", blotch, 0.25 if ZOMBIE else 0.08), attr.outputs["Color"], blot_col, "MIX")
     col = _mix(nt, _math(nt, "MULTIPLY", pores, 0.08), col, (0.0, 0.0, 0.0), "MIX")
     nt.links.new(col, bsdf.inputs["Base Color"])
     bsdf.inputs["Roughness"].default_value = 0.55
@@ -274,7 +312,7 @@ def apply_all(meshes, base, region):
         elif name == "Eyes":
             _build_eyes(mat)
         else:
-            color, rough, kind, scale, dirt, size = GARMENTS[name]
+            color, rough, kind, scale, dirt, size = (Z_GARMENTS if ZOMBIE else GARMENTS)[name]
             _smart_uv(ob)
             nt, _ = _build_fabric(mat, color, rough, kind, scale, dirt, zipper=(name == "Jacket"))
             _bake(ob, nt, size, name.lower(), rough)
@@ -293,8 +331,10 @@ def _recolored_eye():
     r, g, b = im[..., 0], im[..., 1], im[..., 2]
     iris = np.clip((r - g * 1.15) * 4.0, 0.0, 1.0)[..., None]
     target = np.array([0.22, 0.15, 0.1], dtype=np.float32) * (0.5 + im.mean(axis=2, keepdims=True))
+    if ZOMBIE:
+        target = np.array([0.7, 0.72, 0.68], dtype=np.float32) * (0.6 + 0.4 * im.mean(axis=2, keepdims=True))
     out = im * (1 - iris) + target * iris
-    path = "/tmp/alone_days_eye.png"
+    path = "/tmp/alone_days_eye_z.png" if ZOMBIE else "/tmp/alone_days_eye.png"
     Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8)).save(path)
     return path
 

@@ -10,7 +10,7 @@ Jogo de sobrevivência em mundo aberto para Android, em terceira pessoa, feito n
 Controles no PC (o mouse imita o dedo):
 - **Arrastar no lado esquerdo** da tela: joystick · **arrastar no lado direito**: câmera
 - Clicar nos botões redondos: Pular, Agachar, Correr, Interagir
-- Teclado: **W A S D** mover · **Shift** correr rápido · **C** agachar · **Espaço** pular · **E** interagir · **Tab/I** inventário · **Q** arma · **F** atacar/atirar · **R** recarregar
+- Teclado: **W A S D** mover · **Shift** correr rápido · **C** agachar · **Espaço** pular / pular obstáculo / escalar · **E** interagir (Pegar, Beber, Comer) · **G** Guardar · **Tab/I** inventário · **Q** alternar arma · **1–4** barra de armas · **F** atacar/atirar · **R** recarregar
 
 ## APK automático (GitHub)
 Cada envio para o GitHub roda os testes e gera o APK sozinho:

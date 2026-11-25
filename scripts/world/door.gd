@@ -22,6 +22,7 @@ func get_interaction_name() -> String:
 
 func interact(actor: Node) -> void:
 	is_open = not is_open
+	Sfx.play_3d(&"door", global_position + Vector3.UP * 1.2)
 	var direction := 1.0
 	if is_open and actor is Node3D:
 		# Abre para o lado oposto ao jogador, para não bloquear a passagem.

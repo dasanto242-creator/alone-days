@@ -33,3 +33,9 @@ signal noise_emitted(position: Vector3, radius: float, source: Node)
 
 ## O jogador levou dano (para o flash vermelho na tela).
 signal player_damaged(amount: float)
+
+## Segunda opção de interação (ex.: "Guardar" direto na mochila). Vazio = sem segunda opção.
+signal interaction_alt_changed(verb: String)
+
+## Armas do jogador mudaram (empunhou, guardou, pegou, gastou munição): a barra de armas atualiza.
+signal weapons_changed

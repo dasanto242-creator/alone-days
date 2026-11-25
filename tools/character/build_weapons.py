@@ -191,6 +191,40 @@ def pistol():
     return ob
 
 
+def axe():
+    """Machado de lenhador: cabo de madeira curvado, cabeça de aço com fio voltado para +Y (frente)."""
+    wood = material("CaboMachado", (0.55, 0.38, 0.22), 0.6)
+    grip = material("CaboEscuro", (0.32, 0.2, 0.11), 0.7)
+    steel = material("CabecaMachado", (0.3, 0.3, 0.31), 0.45, 0.9)
+    edge = material("FioMachado", (0.7, 0.7, 0.72), 0.25, 1.0)
+    rust = material("Ferrugem", (0.35, 0.18, 0.08), 0.8, 0.3)
+    b = Builder("Axe")
+    # cabo: engrossa na ponta de baixo (pomo) e sob a cabeça
+    b.lathe([(0.0, -0.13), (0.019, -0.128), (0.021, -0.11), (0.016, -0.09), (0.015, 0.1)], grip, 14)
+    b.lathe([(0.015, 0.095), (0.0155, 0.3), (0.017, 0.45), (0.019, 0.52), (0.019, 0.6), (0.0, 0.602)], wood, 14)
+    # cabeça: olho (encaixe no cabo) + lâmina que alarga até o fio
+    b.box((0, -0.005, 0.55), (0.034, 0.05, 0.075), steel, 0.004)
+    b.box((0, -0.045, 0.55), (0.03, 0.04, 0.05), steel, 0.003)       # costas (martelo)
+    pts = [(0.02, 0.0), (0.075, -0.03), (0.13, -0.055), (0.135, 0.075), (0.075, 0.05), (0.02, 0.035)]
+    verts = []
+    for side in (-1, 1):
+        for y, dz in pts:
+            th = 0.012 if y < 0.1 else 0.004  # afina em direção ao fio
+            verts.append(b.bm.verts.new((side * th, y, 0.55 + dz)))
+    n = len(pts)
+    b.bm.faces.new(verts[:n])
+    b.bm.faces.new(list(reversed(verts[n:])))
+    for i in range(n):
+        j = (i + 1) % n
+        b.bm.faces.new((verts[i], verts[j], verts[n + j], verts[n + i]))
+    b._finish_part(verts, steel)
+    b.box((0, 0.136, 0.56), (0.006, 0.012, 0.125), edge, 0.001)     # fio afiado e brilhante
+    b.box((0.0125, 0.06, 0.55), (0.001, 0.03, 0.03), rust, 0.0)     # mancha de ferrugem
+    ob = b.build()
+    ob.data.transform(Matrix.Translation((0, 0, -0.02)))  # origem = mão direita, perto do pomo
+    return ob
+
+
 def ammo_box():
     card = material("Papelao", (0.42, 0.3, 0.16), 0.85)
     print_m = material("Faixa", (0.6, 0.55, 0.35), 0.8)
@@ -256,14 +290,18 @@ def main():
         ("pipe_wrench", pipe_wrench, (1.0, 0.2, 0.1)),
         ("pistol", pistol, (1.0, 0.0, 0.05)),
         ("ammo_9mm", ammo_box, (0.6, -0.8, 0.6)),
+        ("axe", axe, (1.0, -0.2, 0.15)),
     ]
+    only = os.environ.get("ONLY")
     for name, fn, view in items:
+        if only and name != only:
+            continue
         reset()
         ob = fn()
         tris = sum(len(p.vertices) - 2 for p in ob.data.polygons)
         print(f"{name}: {tris} triângulos")
         export(ob, os.path.join(OUT, f"{name}.glb"))
-        if name in ("baseball_bat", "pipe_wrench"):
+        if name in ("baseball_bat", "pipe_wrench", "axe"):
             ob.rotation_euler = (math.radians(-50), 0, 0)  # na diagonal, fica melhor no ícone
             bpy.context.view_layer.update()
         render_icon(ob, os.path.abspath(os.path.join(ICONS, f"{name}.png")), view)

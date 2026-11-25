@@ -47,6 +47,8 @@ const CATEGORY_NAMES := {
 @export var attack_stamina := 0.0
 ## Tempo mínimo entre ataques/disparos (s).
 @export var attack_cooldown := 0.8
+## Força de corte em árvores (0 = não corta; o machado tem 1).
+@export var chop_power := 0.0
 @export var magazine_size := 0
 @export var ammo_item: StringName = &""
 

@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" path="res://scripts/world/item_pickup.gd" id="1_ofb8q"]
 
-[node name="ItemPickup" type="RigidBody3D" unique_id=259681484]
+[node name="ItemPickup" type="RigidBody3D" unique_id=2071675099]
 script = ExtResource("1_ofb8q")

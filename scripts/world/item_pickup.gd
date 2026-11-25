@@ -54,12 +54,42 @@ func get_interaction_name() -> String:
 	return d.display_name if quantity <= 1 else "%s (%d)" % [d.display_name, quantity]
 
 
+## Consumíveis (comida, bebida, remédio) têm duas opções: Pegar (fica na mão para consumir
+## ou guardar) e Guardar (vai direto para a mochila). Os demais itens só têm Pegar.
+func is_consumable() -> bool:
+	var d := Items.get_item(item_id)
+	return d != null and d.is_usable() and d.category in [ItemData.Category.FOOD, ItemData.Category.DRINK,
+		ItemData.Category.MEDICAL]
+
+
+func get_alt_prompt() -> String:
+	return "Guardar" if is_consumable() else ""
+
+
 func interact(actor: Node) -> void:
-	# o personagem agacha e pega; o item entra no inventário quando a mão chega nele
+	# o personagem agacha e pega; o item vai para a mão (consumível) ou para o inventário
 	if actor.has_method("begin_pickup"):
-		actor.begin_pickup(self)
+		actor.begin_pickup(self, is_consumable())
 	else:
 		collect(actor)
+
+
+func interact_alt(actor: Node) -> void:
+	if actor.has_method("begin_pickup"):
+		actor.begin_pickup(self, false)
+	else:
+		collect(actor)
+
+
+## Tira uma unidade do chão (para segurar na mão).
+func take_one() -> ItemStack:
+	if quantity <= 0:
+		return null
+	quantity -= 1
+	var s := ItemStack.new(item_id, 1, durability)
+	if quantity <= 0:
+		queue_free()
+	return s
 
 
 func collect(actor: Node) -> void:

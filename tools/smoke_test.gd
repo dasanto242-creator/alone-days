@@ -204,10 +204,22 @@ func _run_stage2() -> void:
 	var animator := _player.get_node("Visual") as SurvivorAnimator
 	_check("Animação parado = idle (%s)" % animator.current_animation(), animator.current_animation() == &"idle")
 
-	# --- Pegar água e beber
+	# --- Pegar água: Pegar (fica na mão) ou Guardar (vai para a mochila)
 	await _approach(Vector3(-9.6, 0.0, 6.5))
+	var alt_btn := _hud.get_node("%AltInteractButton") as ActionButton
+	_check("Consumível mostra 'Pegar' e 'Guardar' (%s / %s)" % [interact_btn.label, alt_btn.label],
+		interact_btn.label == "Pegar" and alt_btn.visible and alt_btn.label == "Guardar")
 	await _pickup_wait()
-	_check("Pegou garrafa de água", inv.count_of(&"water_bottle") == 1)
+	_check("Pegar: garrafa fica na mão", _player.held != null and _player.held.item_id == &"water_bottle"
+		and inv.count_of(&"water_bottle") == 0)
+	await _frames(3)
+	_check("Com item na mão: botões '%s' e '%s'" % [interact_btn.label, alt_btn.label],
+		interact_btn.label == "Beber" and alt_btn.label == "Guardar")
+	var hand0 := _player.get_node("Visual/Model").find_child("Socket_Hand_R", true, false) as Node3D
+	_check("Garrafa aparece na mão", hand0.get_child_count() > 0)
+	await _tap_action("interact_alt")
+	await _frames(3)
+	_check("Guardar: garrafa vai para a mochila", _player.held == null and inv.count_of(&"water_bottle") == 1)
 	stats.water = 30.0
 	var idx := _index_of(&"water_bottle")
 	_player.use_item(idx)
@@ -359,6 +371,7 @@ func _run_stage2() -> void:
 	_check("Fechar volta aos controles", not screen.visible and controls.visible)
 
 	await _run_weapons()
+	await _run_parkour_axe()
 	await _run_zombie()
 
 	# --- Morte
@@ -366,6 +379,96 @@ func _run_stage2() -> void:
 	await get_tree().create_timer(1.5).timeout
 	var death := _hud.get_node("DeathScreen") as Control
 	_check("Vida zerada mostra a tela de morte", stats.is_dead and death.visible)
+
+
+# ================================================================ PARKOUR, MACHADO, SONS
+
+func _run_parkour_axe() -> void:
+	print("\n-- Parkour, machado e sons --")
+	var world := _player.get_parent()
+	var inv := _player.inventory
+	var stats := _player.stats
+	var weapons := _player.get_node("Weapons") as WeaponHandler
+	var visual := _player.get_node("Visual") as Node3D
+	if weapons.wielded_slot != -1:
+		weapons.set_wielded(-1)
+	stats.stamina = 100.0
+	# --- Salto sobre a cerca (1,2 m de altura, fina)
+	_teleport(Vector3(5.9, 0.05, 12.0), 0.0)
+	visual.rotation.y = -PI / 2  # olhando para +X (a cerca está em x = 7)
+	await _frames(8)
+	var scan := _player.parkour.analyze(_player.global_position, _player.facing())
+	_check("Cerca detectada como salto (%s)" % str(scan.get("kind", "nada")), scan.get("kind", -1) == Parkour.Kind.VAULT)
+	await _tap_action("jump")
+	var tree := (_player.get_node("Visual") as SurvivorAnimator).get("_tree") as AnimationTree
+	await _frames(2)
+	_check("Animação de salto de obstáculo (%s)" % tree.get("parameters/use_kind/current_state"),
+		tree.get("parameters/use_kind/current_state") == "vault")
+	await get_tree().create_timer(1.5).timeout
+	_check("Passou para o outro lado da cerca (x = %.2f)" % _player.global_position.x,
+		_player.global_position.x > 7.3 and _player.is_on_floor())
+	# --- Escalada na plataforma de 1,5 m
+	_teleport(Vector3(12.0, 0.05, -7.0), 0.0)
+	visual.rotation.y = PI  # olhando para +Z
+	await _frames(8)
+	scan = _player.parkour.analyze(_player.global_position, _player.facing())
+	_check("Plataforma detectada como escalada (altura %.2f)" % float(scan.get("height", 0.0)),
+		scan.get("kind", -1) == Parkour.Kind.CLIMB)
+	await _tap_action("jump")
+	await get_tree().create_timer(2.0).timeout
+	_check("Subiu na plataforma (y = %.2f)" % _player.global_position.y,
+		_player.global_position.y > 1.4 and _player.global_position.z > -5.9 and _player.is_on_floor())
+	# chão livre: Pular continua sendo um pulo normal
+	_teleport(Vector3(0, 0.05, 22.0), 0.0)
+	await _frames(8)
+	_check("Sem obstáculo à frente não há parkour",
+		_player.parkour.analyze(_player.global_position, _player.facing()).is_empty())
+
+	# --- Machado pela barra de armas
+	inv.add_item(&"axe")
+	await _frames(3)
+	var hotbar := _hud.get_node("%WeaponHotbar") as WeaponHotbar
+	var entries := weapons.weapon_entries()
+	_check("Barra de armas lista %d armas (taco, pistola, machado)" % entries.size(), entries.size() == 3)
+	weapons.select_entry(2)
+	await _frames(3)
+	var axe := inv.equipped(ItemData.Slot.MELEE)
+	_check("Tocar no machado: troca pelo taco e empunha", axe != null and axe.item_id == &"axe"
+		and weapons.wielded_slot == ItemData.Slot.MELEE and inv.count_of(&"baseball_bat") == 1)
+	_check("Espaço do machado destacado na barra", (hotbar.get_node("Slot1") as Button).visible)
+	weapons.select_entry(0)
+	await _frames(2)
+	_check("Tocar de novo guarda o machado nas costas", weapons.wielded_slot == -1)
+	weapons.select_entry(0)
+	await _frames(2)
+
+	# --- Cortar árvore
+	var tree_node := world.get_node("Grove/ChopTree0") as ChoppableTree
+	var to_tree := Vector3(-17, 0, 10) + Vector3(0, 0.05, 1.0)
+	_teleport(to_tree, 0.0)
+	visual.rotation.y = 0.0  # olhando para -Z (a árvore está 1 m à frente)
+	_rig.set("_yaw_deg", 0.0)
+	await _frames(5)
+	for i in tree_node.hits_to_fell:
+		stats.stamina = 100.0
+		await _tap_action("attack")
+		await get_tree().create_timer(1.1).timeout
+	_check("Machado derruba a árvore depois de %d golpes (golpes: %d)" % [tree_node.hits_to_fell, tree_node.hits],
+		tree_node.is_felled)
+	await get_tree().create_timer(2.2).timeout
+	var pivot := tree_node.get_node("Pivot") as Node3D
+	var tilt := rad_to_deg(Vector3.UP.angle_to(pivot.global_basis.y))
+	_check("Árvore tomba (inclinação %.0f°)" % tilt, tilt > 70.0)
+	_check("Tronco caído não bloqueia a passagem (só o toco)",
+		((tree_node.get_node("Collision") as CollisionShape3D).shape as CylinderShape3D).height < 0.5)
+	weapons.set_wielded(-1)
+
+	# --- Sons
+	_check("Sons carregados (tiro, passos, zumbi, machado)", Sfx.has_sound(&"gunshot") and Sfx.has_sound(&"step_grass")
+		and Sfx.has_sound(&"zombie_groan") and Sfx.has_sound(&"axe_chop") and Sfx.has_sound(&"tree_fall"))
+	_check("Vento ambiente tocando em loop", Sfx.get("_ambient") != null and (Sfx.get("_ambient") as AudioStreamPlayer).playing)
+	stats.health = 100.0
+	stats.stamina = 100.0
 
 
 # ================================================================ ZUMBI
@@ -461,9 +564,11 @@ func _run_weapons() -> void:
 	var bat_node := animator.weapon_node(ItemData.Slot.MELEE)
 	_check("Modelo do taco preso nas costas (%s)" % (bat_node.get_parent().name if bat_node else "nenhum"),
 		bat_node != null and String(bat_node.get_parent().name).begins_with("Socket_Back"))
-	var weapon_btn := _hud.get_node("%WeaponButton") as ActionButton
+	var hotbar := _hud.get_node("%WeaponHotbar") as WeaponHotbar
 	var attack_btn := _hud.get_node("%AttackButton") as ActionButton
-	_check("Botão Arma aparece", weapon_btn.visible and not attack_btn.visible)
+	await _frames(2)
+	_check("Barra de armas aparece com o taco", hotbar.visible and (hotbar.get_node("Slot1") as Button).visible
+		and not (hotbar.get_node("Slot2") as Button).visible and not attack_btn.visible)
 
 	# --- Empunhar e golpear o boneco
 	await _tap_action("weapon")

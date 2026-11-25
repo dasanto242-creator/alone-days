@@ -20,10 +20,10 @@ const BLEND_SPACES := {
 }
 const LOCO: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk", &"jump", &"death"]
 const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
-	&"hold_melee", &"hold_pistol", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left", &"run_right"]
-const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol"]
+	&"hold_melee", &"hold_pistol", &"hold_item", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left", &"run_right"]
+const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol", &"hold_item"]
 const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol"]
-const USES: Array[StringName] = [&"drink", &"eat", &"pickup"]
+const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
 	"lowerarm", "wrist", "finger"]
 const ACTION_BONES := ["spine04", "spine03"]
@@ -150,8 +150,10 @@ func set_wielded(slot: int, inventory: Inventory) -> void:
 	if not is_node_ready():
 		await ready
 	_wielded = slot
-	_hold_target = 1.0 if slot >= 0 else 0.0
-	if slot == ItemData.Slot.MELEE:
+	_hold_target = 1.0 if slot >= 0 or _held_prop != null else 0.0
+	if slot < 0 and _held_prop != null:
+		_tree.set("parameters/hold_kind/transition_request", "hold_item")
+	elif slot == ItemData.Slot.MELEE:
 		_tree.set("parameters/hold_kind/transition_request", "hold_melee")
 	elif slot == ItemData.Slot.SIDEARM:
 		_tree.set("parameters/hold_kind/transition_request", "hold_pistol")
@@ -186,6 +188,30 @@ func play_use(anim_name: StringName, item: ItemData = null, show_from := 0.0, sh
 		_prop_hide_at = length - 0.15 if show_until < 0.0 else show_until
 		_prop.visible = false
 	return length
+
+
+## Segurando um item consumível na mão (antes de decidir consumir ou guardar).
+var _held_prop: Node3D
+
+
+func set_holding(item: ItemData) -> void:
+	if _held_prop:
+		_held_prop.queue_free()
+		_held_prop = null
+	if item == null:
+		if _wielded < 0:
+			_hold_target = 0.0
+		return
+	var hand := _sockets.get("Socket_Hand_R") as Node3D
+	if hand:
+		_held_prop = _make_prop(item)
+		hand.add_child(_held_prop)
+	_tree.set("parameters/hold_kind/transition_request", "hold_item")
+	_hold_target = 1.0
+
+
+func is_holding() -> bool:
+	return _held_prop != null
 
 
 func is_using() -> bool:

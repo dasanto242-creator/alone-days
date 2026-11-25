@@ -83,6 +83,24 @@
   - Desempenho: decisões em intervalos que crescem com a distância; longe (>85 m) fica congelado e
     invisível. Máximo de 3 vivos no cenário de teste; corpos somem e novos nascem longe do jogador.
 
+## Ajustes de 25/11 (3) — parkour, machado, barra de armas, sons
+- Parkour com o botão Pular de frente para um obstáculo: muro baixo e fino (0,4–1,3 m) = salto
+  apoiando a mão; borda alta ou bloco (0,9–2,1 m) com espaço em cima = escalada (agarra, empurra,
+  sobe o joelho). O corpo segue a trajetória das animações, ajustada à altura e espessura reais.
+- Marca de tiro não fica mais flutuando: zumbi só sangra; objetos que se movem levam a marca junto.
+- Machado (modelo e ícone próprios): arma branca forte que vai nas costas e corta árvores.
+- Bosque com 6 árvores cortáveis: cada machadada treme a árvore, solta lascas e aprofunda o corte;
+  no 5º golpe ela estala, tomba acelerando, quica, afunda e some (fica o toco). Cresce de novo em 5 min.
+  Taco e grifo só batem (aviso "Precisa de um machado").
+- Barra de armas no centro, embaixo: até 4 armas (corpo + mochila), toque empunha/guarda e troca a
+  arma da mochila com a do corpo; mostra munição e estado. Substitui o botão "Arma".
+- Consumíveis no chão: **Pegar** (fica na mão) ou **Guardar** (direto na mochila). Com o item na
+  mão: **Beber/Comer/Usar** ou **Guardar**.
+- Sons próprios gerados por síntese (sem licença de terceiros): passos (grama e piso duro), tiro,
+  recarga, sem munição, golpe no ar, impacto, machadada, árvore estalando e caindo, gemidos,
+  ataque, dor e morte do zumbi, dor e esforço do jogador, aterrissagem, comer, beber, pegar,
+  mochila, porta e vento ambiente em loop. Gerador: `tools/audio/make_sounds.py`.
+
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).
 - ~22 mil triângulos, 67 ossos, texturas próprias comprimidas para celular.

@@ -26,6 +26,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("weapon"):
 		cycle_weapon()
+	for i in 4:
+		if Input.is_action_just_pressed("weapon_%d" % (i + 1)):
+			select_entry(i)
 	if Input.is_action_just_pressed("reload"):
 		reload()
 	if Input.is_action_just_pressed("attack"):
@@ -44,6 +47,42 @@ func wielded_data() -> ItemData:
 func has_weapons() -> bool:
 	var inv := _player.inventory
 	return inv.equipped(ItemData.Slot.MELEE) != null or inv.equipped(ItemData.Slot.SIDEARM) != null
+
+
+## Armas para a barra de armas: primeiro as que estão no corpo (costas e coldre), depois as que
+## estão na mochila. Cada entrada: {stack, slot, equipped, index (na mochila, ou -1)}. Máx. 4.
+func weapon_entries() -> Array:
+	var inv := _player.inventory
+	var out := []
+	for slot in [ItemData.Slot.MELEE, ItemData.Slot.SIDEARM]:
+		var s := inv.equipped(slot)
+		if s:
+			out.append({"stack": s, "slot": slot, "equipped": true, "index": -1})
+	for i in inv.stacks.size():
+		var d := inv.stacks[i].data()
+		if d and d.is_weapon() and d.equip_slot != ItemData.Slot.NONE and out.size() < 4:
+			out.append({"stack": inv.stacks[i], "slot": d.equip_slot, "equipped": false, "index": i})
+	return out
+
+
+## Toque num espaço da barra de armas: empunha / guarda / troca pela arma da mochila.
+func select_entry(i: int) -> void:
+	if _busy > 0.0 or _player.is_busy():
+		return
+	var entries := weapon_entries()
+	if i < 0 or i >= entries.size():
+		return
+	if _player.held != null and not _player.store_held():
+		return
+	var e: Dictionary = entries[i]
+	if e.equipped:
+		set_wielded(-1 if wielded_slot == e.slot else e.slot)
+		return
+	# arma da mochila: troca com a que está no corpo (a antiga vai para a mochila) e empunha
+	if _player.inventory.equip(e.index):
+		set_wielded(e.slot)
+		var d := (e.stack as ItemStack).data()
+		Events.notify.emit("Empunhou %s" % (d.display_name if d else "arma"))
 
 
 ## Mãos livres -> arma branca -> pistola -> mãos livres (pula o que não estiver equipado).
@@ -90,6 +129,7 @@ func reload() -> void:
 		return
 	_busy = RELOAD_TIME
 	_player.animator().play_action(&"reload_pistol")
+	Sfx.play_3d(&"reload", _player.global_position + Vector3.UP * 1.2)
 	await get_tree().create_timer(RELOAD_TIME * 0.7).timeout
 	if wielded_stack() != s:
 		return
@@ -107,6 +147,8 @@ func _melee(d: ItemData) -> void:
 	_cooldown = d.attack_cooldown
 	_busy = d.attack_cooldown * 0.8
 	_player.animator().play_action(&"attack_melee")
+	get_tree().create_timer(0.18).timeout.connect(
+		func() -> void: Sfx.play_3d(&"swing", _player.global_position + Vector3.UP * 1.3))
 	Events.noise_emitted.emit(_player.global_position, 5.0, _player)
 	await get_tree().create_timer(MELEE_HIT_DELAY).timeout
 	if _player.stats.is_dead:
@@ -148,6 +190,7 @@ func _shoot(d: ItemData) -> void:
 	var s := wielded_stack()
 	if s.loaded <= 0:
 		_cooldown = 0.3
+		Sfx.play_3d(&"gun_empty", _player.global_position + Vector3.UP * 1.2)
 		Events.notify.emit("Sem munição — recarregue" if _player.inventory.count_of(d.ammo_item) > 0 else "Sem munição")
 		return
 	s.loaded -= 1
@@ -155,6 +198,7 @@ func _shoot(d: ItemData) -> void:
 	_player.snap_to_camera()
 	_player.animator().play_action(&"fire_pistol")
 	_player.animator().muzzle_flash()
+	Sfx.play_3d(&"gunshot", _player.global_position + Vector3.UP * 1.4)
 	Events.noise_emitted.emit(_player.global_position, 45.0, _player)  # tiro: ouvido de longe
 	_player.camera_rig().add_recoil(1.6)
 	GameSettings.vibrate(18, 0.6)
@@ -166,7 +210,14 @@ func _shoot(d: ItemData) -> void:
 	query.exclude = [_player.get_rid()]
 	var hit := _player.get_world_3d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty():
-		ImpactEffect.spawn(_player.get_parent(), hit.position, hit.normal)
+		# marca de bala só em superfícies fixas; corpos que se mexem (zumbi, item, porta) não
+		# podem ficar com a marca "flutuando" quando saem do lugar — zumbi solta sangue
+		var col: Object = hit.collider
+		if col is StaticBody3D or col is CSGShape3D:
+			ImpactEffect.spawn(_player.get_parent(), hit.position, hit.normal)
+		elif col is Node3D and not (col is Zombie):
+			var fx := ImpactEffect.spawn(_player.get_parent(), hit.position, hit.normal)
+			fx.reparent(col as Node3D)
 		if hit.collider.has_method("apply_damage"):
 			hit.collider.apply_damage(d.damage, _player, hit.position)
 			Events.hit_landed.emit(hit.collider, d.damage, hit.position)
@@ -192,5 +243,6 @@ func ammo_text() -> String:
 
 
 func _emit_state() -> void:
+	Events.weapons_changed.emit()
 	var d := wielded_data()
 	Events.weapon_state_changed.emit(d.weapon_kind if d else ItemData.WeaponKind.NONE, ammo_text(), has_weapons())

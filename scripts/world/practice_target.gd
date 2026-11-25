@@ -11,9 +11,10 @@ var total_damage := 0.0
 var _tween: Tween
 
 
-func apply_damage(amount: float, source: Node, _point: Vector3) -> void:
+func apply_damage(amount: float, source: Node, point: Vector3) -> void:
 	hits += 1
 	total_damage += amount
+	Sfx.play_3d(&"wood_knock", point if point != Vector3.ZERO else global_position)
 	var visual := get_node_or_null(visual_path) as Node3D
 	if visual == null:
 		return

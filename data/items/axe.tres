@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/axe.png" id="1_t363m"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/axe.glb" id="2_8fsb2"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="3_f3ttt"]
+
+[resource]
+script = ExtResource("3_f3ttt")
+id = &"axe"
+display_name = "Machado"
+description = "Machado de lenhador. Corta árvores e é uma arma brutal, mas pesada."
+icon = ExtResource("1_t363m")
+category = 6
+weight = 1.8
+max_durability = 160.0
+equip_slot = 3
+weapon_kind = 1
+damage = 55.0
+attack_range = 1.6
+attack_stamina = 20.0
+attack_cooldown = 1.0
+chop_power = 1.0
+model = ExtResource("2_8fsb2")
+world_rotation = Vector3(90, 10, 0)
+world_size = Vector3(0.05, 0.25, 0.75)
+world_color = Color(0.55, 0.38, 0.22, 1)

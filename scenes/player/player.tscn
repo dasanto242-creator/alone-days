@@ -1,46 +1,50 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_p47bc"]
-[ext_resource type="Script" path="res://scripts/survival/survival_stats.gd" id="2_75vfm"]
-[ext_resource type="Script" path="res://scripts/player/weapon_handler.gd" id="3_0owmy"]
-[ext_resource type="Script" path="res://scripts/player/survivor_animator.gd" id="4_qek5x"]
-[ext_resource type="PackedScene" path="res://assets/models/survivor/survivor.glb" id="5_5gtgg"]
+[ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_75vfm"]
+[ext_resource type="Script" path="res://scripts/survival/survival_stats.gd" id="2_0owmy"]
+[ext_resource type="Script" path="res://scripts/player/weapon_handler.gd" id="3_qek5x"]
+[ext_resource type="Script" path="res://scripts/player/parkour.gd" id="4_5gtgg"]
+[ext_resource type="Script" path="res://scripts/player/survivor_animator.gd" id="5_h17s1"]
+[ext_resource type="PackedScene" path="res://assets/models/survivor/survivor.glb" id="6_je7p5"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_h17s1"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_fm80t"]
 radius = 0.28
 height = 1.8
 
-[sub_resource type="SphereShape3D" id="SphereShape3D_je7p5"]
+[sub_resource type="SphereShape3D" id="SphereShape3D_gx1jg"]
 radius = 1.1
 
-[node name="Player" type="CharacterBody3D" unique_id=1997947340]
+[node name="Player" type="CharacterBody3D" unique_id=67840238]
 collision_layer = 2
 collision_mask = 17
 floor_max_angle = 0.80285144
 floor_snap_length = 0.35
-script = ExtResource("1_p47bc")
+script = ExtResource("1_75vfm")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1027701317]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=749867651]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
-shape = SubResource("CapsuleShape3D_h17s1")
+shape = SubResource("CapsuleShape3D_fm80t")
 
-[node name="Survival" type="Node" parent="." unique_id=762398621]
-script = ExtResource("2_75vfm")
+[node name="Survival" type="Node" parent="." unique_id=1446699218]
+script = ExtResource("2_0owmy")
 
-[node name="Weapons" type="Node" parent="." unique_id=1862645511]
-script = ExtResource("3_0owmy")
+[node name="Weapons" type="Node" parent="." unique_id=269202082]
+script = ExtResource("3_qek5x")
 
-[node name="Visual" type="Node3D" parent="." unique_id=990056291]
-script = ExtResource("4_qek5x")
+[node name="Parkour" type="Node" parent="." unique_id=743316927]
+script = ExtResource("4_5gtgg")
 
-[node name="Model" parent="Visual" unique_id=355699941 instance=ExtResource("5_5gtgg")]
+[node name="Visual" type="Node3D" parent="." unique_id=1188386414]
+script = ExtResource("5_h17s1")
+
+[node name="Model" parent="Visual" unique_id=1926913141 instance=ExtResource("6_je7p5")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="InteractionArea" type="Area3D" parent="Visual" unique_id=2123410144]
+[node name="InteractionArea" type="Area3D" parent="Visual" unique_id=1719255973]
 collision_layer = 0
 collision_mask = 4
 monitorable = false
 
-[node name="Shape" type="CollisionShape3D" parent="Visual/InteractionArea" unique_id=593247746]
+[node name="Shape" type="CollisionShape3D" parent="Visual/InteractionArea" unique_id=2060303499]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -0.7)
-shape = SubResource("SphereShape3D_je7p5")
+shape = SubResource("SphereShape3D_gx1jg")

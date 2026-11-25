@@ -61,6 +61,13 @@ const STEP_NOISE := {"crouch": 1.5, "walk": 4.0, "jog": 9.0, "sprint": 16.0}
 @onready var _visual: Node3D = $Visual
 @onready var _animator: SurvivorAnimator = $Visual
 @onready var _interaction_area: Area3D = $Visual/InteractionArea
+@onready var parkour: Parkour = $Parkour
+
+## Item consumível na mão (pego do chão com "Pegar"): Consumir ou Guardar.
+var held: ItemStack = null
+var _pending_hold := false
+var _step_distance := 0.0
+var _air_time := 0.0
 
 
 func _ready() -> void:
@@ -75,6 +82,15 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if parkour.is_active():
+		global_position = parkour.step(delta)
+		velocity = Vector3.ZERO
+		_busy = maxf(_busy - delta, 0.0)
+		if not parkour.is_active():
+			_busy = 0.0
+			_finish_action()
+		_animator.update_pose(0.0, sprint_speed, true, false, delta)
+		return
 	_update_busy(delta)
 	if _busy <= 0.0:
 		_handle_actions()
@@ -130,8 +146,30 @@ func _physics_process(delta: float) -> void:
 	var ground_speed := Vector2(velocity.x, velocity.z).length()
 	stats.tick(delta, _exertion(ground_speed))
 	_emit_step_noise(delta, ground_speed)
+	_footsteps(delta, ground_speed)
 	_animator.update_pose(ground_speed, sprint_speed, is_on_floor(), is_crouching, delta, _local_move_dir())
 	_update_interaction_focus()
+
+
+## Fim de uma ação de corpo inteiro: a arma volta para a mão (se não estiver segurando um item).
+func _finish_action() -> void:
+	if _rewield_slot != -1 and held == null:
+		var weapons := get_node_or_null("Weapons") as WeaponHandler
+		if weapons and inventory.equipped(_rewield_slot) != null and weapons.wielded_slot == -1:
+			weapons.set_wielded(_rewield_slot)
+		_rewield_slot = -1
+
+
+## Começa um salto/escalada (chamado pelo Parkour).
+func begin_parkour(anim: StringName, fwd: Vector3, length: float) -> void:
+	_lower_weapon()
+	_set_sprinting(false)
+	if is_crouching:
+		_set_crouching(false)
+	_visual.rotation.y = atan2(-fwd.x, -fwd.z)
+	_animator.play_use(anim)
+	_busy = length
+	velocity = Vector3.ZERO
 
 
 ## Guarda a arma durante a ação (mão livre) e lembra qual era para devolver depois.
@@ -149,17 +187,18 @@ func is_busy() -> bool:
 func _update_busy(delta: float) -> void:
 	var was_busy := _busy > 0.0
 	_busy = maxf(_busy - delta, 0.0)
-	if was_busy and _busy <= 0.0 and _rewield_slot != -1:
-		var weapons := get_node_or_null("Weapons") as WeaponHandler
-		if weapons and inventory.equipped(_rewield_slot) != null and weapons.wielded_slot == -1:
-			weapons.set_wielded(_rewield_slot)
-		_rewield_slot = -1
+	if was_busy and _busy <= 0.0:
+		_finish_action()
 	if _pickup_timer >= 0.0:
 		_pickup_timer -= delta
 		if _pickup_timer < 0.0:
 			if is_instance_valid(_pending_pickup) and not _pending_pickup.is_queued_for_deletion() \
 					and not stats.is_dead:
-				_pending_pickup.collect(self)
+				if _pending_hold:
+					_take_in_hand(_pending_pickup)
+				else:
+					_pending_pickup.collect(self)
+					Sfx.play_3d(&"bag", global_position + Vector3.UP)
 			_pending_pickup = null
 
 
@@ -179,6 +218,7 @@ func take_hit(amount: float, from: Node3D = null) -> void:
 		return
 	stats.apply_damage(amount)
 	Events.player_damaged.emit(amount)
+	Sfx.play_3d(&"player_hurt", global_position + Vector3.UP * 1.5)
 	GameSettings.vibrate(120, 1.0)
 	if _camera_rig:
 		_camera_rig.add_recoil(2.5)
@@ -190,9 +230,14 @@ func take_hit(amount: float, from: Node3D = null) -> void:
 
 
 ## Agacha, pega o item do chão e levanta. O item entra no inventário quando a mão o alcança.
-func begin_pickup(pickup: Node3D) -> void:
+func begin_pickup(pickup: Node3D, hold := false) -> void:
 	if _busy > 0.0 or stats.is_dead or _pending_pickup != null:
 		return
+	if hold and held != null:
+		store_held()  # já tinha algo na mão: guarda antes de pegar outro
+		if held != null:
+			return
+	_pending_hold = hold
 	_lower_weapon()
 	_set_sprinting(false)
 	var to := pickup.global_position - global_position
@@ -205,6 +250,71 @@ func begin_pickup(pickup: Node3D) -> void:
 	_pending_pickup = pickup
 	_pickup_timer = 0.48
 	velocity = Vector3(0, velocity.y, 0)
+	Sfx.play_3d(&"pickup", pickup.global_position)
+
+
+## Item pego com "Pegar": fica na mão até o jogador escolher Consumir ou Guardar.
+func _take_in_hand(pickup: Node) -> void:
+	var stack := (pickup as ItemPickup).take_one()
+	if stack == null:
+		return
+	held = stack
+	_animator.set_holding(stack.data())
+	_focused_interactable = null
+	_last_prompt = ""
+
+
+## Come/bebe/usa o item que está na mão.
+func consume_held() -> bool:
+	if held == null or _busy > 0.0 or stats.is_dead:
+		return false
+	var d := held.data()
+	held = null
+	_animator.set_holding(null)
+	_last_prompt = ""
+	return _consume(d)
+
+
+## Põe o item da mão na mochila (se couber).
+func store_held() -> bool:
+	if held == null:
+		return false
+	var d := held.data()
+	if inventory.add_item(held.item_id, 1, held.durability) <= 0:
+		Events.notify.emit("Sem espaço para %s" % (d.display_name if d else "o item"))
+		return false
+	held = null
+	_animator.set_holding(null)
+	_last_prompt = ""
+	Sfx.play_3d(&"bag", global_position + Vector3.UP)
+	Events.notify.emit("Guardou %s" % (d.display_name if d else ""))
+	_finish_action()
+	return true
+
+
+## Passos: um som a cada passada, de acordo com o piso (grama ou piso duro).
+func _footsteps(delta: float, ground_speed: float) -> void:
+	if not is_on_floor():
+		_air_time += delta
+		return
+	if _air_time > 0.35:
+		Sfx.play_3d(&"land", global_position, -2.0 if _air_time < 0.8 else 2.0)
+		_step_distance = 0.0
+	_air_time = 0.0
+	if ground_speed < 0.3:
+		_step_distance = 0.0
+		return
+	_step_distance += ground_speed * delta
+	var stride := 0.5 if is_crouching else (0.62 if ground_speed < 2.4 else (1.0 if ground_speed < 4.7 else 1.3))
+	if _step_distance < stride:
+		return
+	_step_distance = 0.0
+	var surface := &"step_grass"
+	var floor_hit := get_last_slide_collision()
+	if floor_hit and floor_hit.get_collider() is Node and (floor_hit.get_collider() as Node).name != "Ground":
+		surface = &"step_hard"
+	var vol := -12.0 if is_crouching else (-4.0 if ground_speed < 2.4 else 0.0)
+	Sfx.play_3d(surface, global_position, vol)
 
 
 ## Postura de combate: arma em mãos e sem estar em sprint (no sprint a arma abaixa e o corpo
@@ -284,15 +394,26 @@ func _handle_actions() -> void:
 		else:
 			_set_sprinting(not is_sprinting)
 	if Input.is_action_just_pressed("jump") and is_on_floor():
-		if is_crouching:
+		if held == null and parkour.try_start():
+			pass
+		elif is_crouching:
 			_set_crouching(false)
 		elif stats.can_jump():
 			stats.spend_stamina(stats.jump_cost)
 			velocity.y = jump_velocity
 		else:
 			Events.notify.emit("Sem fôlego")
+	if held != null:
+		if Input.is_action_just_pressed("interact"):
+			consume_held()
+		elif Input.is_action_just_pressed("interact_alt"):
+			store_held()
+		return
 	if Input.is_action_just_pressed("interact") and _focused_interactable:
 		_focused_interactable.interact(self)
+	elif Input.is_action_just_pressed("interact_alt") and _focused_interactable \
+			and _focused_interactable.has_method("interact_alt"):
+		_focused_interactable.interact_alt(self)
 
 
 func _target_speed(strength: float) -> float:
@@ -351,27 +472,37 @@ func _can_stand_up() -> bool:
 
 ## Escolhe o objeto interativo mais próximo à frente do personagem.
 func _update_interaction_focus() -> void:
-	var best: Node = null
-	var best_distance := INF
-	var candidates: Array = _interaction_area.get_overlapping_bodies()
-	candidates.append_array(_interaction_area.get_overlapping_areas())
-	for candidate in candidates:
-		if not candidate.has_method("interact") or candidate.is_queued_for_deletion():
-			continue
-		var d := global_position.distance_squared_to(candidate.global_position)
-		if d < best_distance:
-			best_distance = d
-			best = candidate
 	var verb := ""
 	var target_name := ""
-	if best:
-		verb = best.get_interaction_prompt() if best.has_method("get_interaction_prompt") else "Usar"
-		target_name = best.get_interaction_name() if best.has_method("get_interaction_name") else ""
-	var prompt := verb + "|" + target_name
+	var alt := ""
+	var best: Node = null
+	if held != null:
+		# item na mão: os botões viram Consumir (Beber/Comer/Usar) e Guardar
+		var d := held.data()
+		verb = d.use_verb if d and not d.use_verb.is_empty() else "Consumir"
+		target_name = d.display_name if d else ""
+		alt = "Guardar"
+	elif _busy <= 0.0:
+		var best_distance := INF
+		var candidates: Array = _interaction_area.get_overlapping_bodies()
+		candidates.append_array(_interaction_area.get_overlapping_areas())
+		for candidate in candidates:
+			if not candidate.has_method("interact") or candidate.is_queued_for_deletion():
+				continue
+			var dist := global_position.distance_squared_to(candidate.global_position)
+			if dist < best_distance:
+				best_distance = dist
+				best = candidate
+		if best:
+			verb = best.get_interaction_prompt() if best.has_method("get_interaction_prompt") else "Usar"
+			target_name = best.get_interaction_name() if best.has_method("get_interaction_name") else ""
+			alt = best.get_alt_prompt() if best.has_method("get_alt_prompt") else ""
+	var prompt := verb + "|" + target_name + "|" + alt
 	if best != _focused_interactable or prompt != _last_prompt:
 		_focused_interactable = best
 		_last_prompt = prompt
 		Events.interaction_target_changed.emit(verb, target_name)
+		Events.interaction_alt_changed.emit(alt)
 
 
 func _on_died() -> void:
@@ -428,6 +559,10 @@ func use_item(index: int) -> bool:
 	if _busy > 0.0 or stats.is_dead:
 		return false
 	inventory.take_from(index, 1)
+	return _consume(d)
+
+
+func _consume(d: ItemData) -> bool:
 	stats.consume(d)
 	Events.notify.emit("%s: %s" % [d.use_verb, d.display_name])
 	var anim := &""
@@ -439,6 +574,7 @@ func use_item(index: int) -> bool:
 		_lower_weapon()
 		_set_sprinting(false)
 		_busy = _animator.play_use(anim, d, 0.1)
+		Sfx.play_3d(&"drink" if anim == &"drink" else &"eat", global_position + Vector3.UP * 1.5)
 	return true
 
 

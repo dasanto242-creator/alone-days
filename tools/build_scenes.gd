@@ -132,6 +132,7 @@ func _build_player() -> Node:
 
 	_node(Node, "Survival", player, "res://scripts/survival/survival_stats.gd")
 	_node(Node, "Weapons", player, "res://scripts/player/weapon_handler.gd")
+	_node(Node, "Parkour", player, "res://scripts/player/parkour.gd")
 
 	# Modelo 3D do sobrevivente (gerado no Blender por tools/character/build_survivor.py)
 	var visual := _node(Node3D, "Visual", player, "res://scripts/player/survivor_animator.gd")
@@ -222,8 +223,19 @@ func _build_hud() -> Node:
 	_button(safe, "CrouchButton", "crouch", "Agachar", 38.0, Vector2(-310, -62))
 	_button(safe, "SprintButton", "sprint", "Correr", 38.0, Vector2(-88, -215))
 	_button(safe, "ReloadButton", "reload", "Recarregar", 34.0, Vector2(-196, -262))
-	_button(safe, "WeaponButton", "weapon", "Arma", 34.0, Vector2(-318, -182))
 	_button(safe, "InteractButton", "interact", "", 44.0, Vector2(-420, -120))
+	_button(safe, "AltInteractButton", "interact_alt", "Guardar", 36.0, Vector2(-420, -238))
+	# barra de armas: centro, embaixo
+	var bar := _node(HBoxContainer, "WeaponHotbar", safe, "res://scripts/ui/weapon_hotbar.gd") as HBoxContainer
+	bar.unique_name_in_owner = true
+	bar.anchor_left = 0.5
+	bar.anchor_right = 0.5
+	bar.anchor_top = 1.0
+	bar.anchor_bottom = 1.0
+	bar.offset_left = -170
+	bar.offset_right = 170
+	bar.offset_top = -92
+	bar.offset_bottom = -12
 
 	# Indicadores de sobrevivência (canto superior direito)
 	var stats_hud := _node(Control, "SurvivalHud", safe, "res://scripts/ui/survival_hud.gd") as Control
@@ -338,6 +350,7 @@ func _build_sandbox() -> Node:
 	_build_stairs(root, Vector3(12, 0, -4))
 	_build_props(root)
 	_build_trees(root)
+	_build_choppable_trees(root)
 	_build_loot(root)
 	_build_zombies(root)
 
@@ -526,6 +539,17 @@ func _build_trees(root: Node) -> void:
 		mmi.multimesh = mm
 
 
+## Pequeno bosque perto do início com árvores que podem ser cortadas com o machado.
+func _build_choppable_trees(root: Node) -> void:
+	var grove := _node(Node3D, "Grove", root)
+	var spots := [Vector3(-17, 0, 10), Vector3(-19.5, 0, 14.5), Vector3(-16, 0, 17.5), Vector3(-21.5, 0, 9),
+		Vector3(-22, 0, 18.5), Vector3(-18.5, 0, 21.5)]
+	for i in spots.size():
+		var t := _node(StaticBody3D, "ChopTree%d" % i, grove, "res://scripts/world/choppable_tree.gd") as StaticBody3D
+		t.position = spots[i]
+		t.rotation.y = i * 1.3
+
+
 # ---------------------------------------------------------------- itens
 
 func _item(id: String, display_name: String, desc: String, category: int, weight: float,
@@ -588,6 +612,11 @@ func _build_items() -> bool:
 			{"equip_slot": ItemData.Slot.MELEE, "weapon_kind": ItemData.WeaponKind.MELEE, "damage": 45.0,
 			"attack_range": 1.5, "attack_stamina": 18.0, "attack_cooldown": 0.95, "max_durability": 140.0,
 			"world_rotation": Vector3(90, -20, 0)}),
+		_item("axe", "Machado", "Machado de lenhador. Corta árvores e é uma arma brutal, mas pesada.",
+			C.WEAPON, 1.8, 1, W.BOX, Vector3(0.05, 0.25, 0.75), Color(0.55, 0.38, 0.22),
+			{"equip_slot": ItemData.Slot.MELEE, "weapon_kind": ItemData.WeaponKind.MELEE, "damage": 55.0,
+			"attack_range": 1.6, "attack_stamina": 20.0, "attack_cooldown": 1.0, "max_durability": 160.0,
+			"chop_power": 1.0, "world_rotation": Vector3(90, 10, 0)}),
 		_item("pistol", "Pistola 9 mm", "Semiautomática, carregador de 15 tiros. O barulho atrai atenção.",
 			C.WEAPON, 0.9, 1, W.BOX, Vector3(0.03, 0.14, 0.2), Color(0.1, 0.1, 0.1),
 			{"equip_slot": ItemData.Slot.SIDEARM, "weapon_kind": ItemData.WeaponKind.PISTOL, "damage": 40.0,
@@ -647,6 +676,7 @@ func _build_loot(root: Node) -> void:
 	# Armas e munição
 	_pickup(loot, "baseball_bat", Vector3(6.6, 0.04, 4.8))
 	_pickup(loot, "pipe_wrench", Vector3(10.4, 0.03, 1.0))
+	_pickup(loot, "axe", Vector3(-15.0, 0.03, 13.0))
 	_pickup(loot, "pistol", Vector3(2.5, 0.87, -15.3))
 	_pickup(loot, "ammo_9mm", Vector3(-11.0, 0.0, 7.2), 15)
 	_pickup(loot, "ammo_9mm", Vector3(-2.6, 0.1, -15.6), 15)

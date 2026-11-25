@@ -28,7 +28,7 @@ var _target_label: Label
 @onready var _sprint_button: ActionButton = %SprintButton
 @onready var _attack_button: ActionButton = %AttackButton
 @onready var _reload_button: ActionButton = %ReloadButton
-@onready var _weapon_button: ActionButton = %WeaponButton
+@onready var _alt_button: ActionButton = %AltInteractButton
 
 
 func _ready() -> void:
@@ -36,6 +36,11 @@ func _ready() -> void:
 	for node in find_children("*", "ActionButton", true, false):
 		_buttons.append(node as ActionButton)
 	_interact_button.visible = false
+	_alt_button.visible = false
+	Events.interaction_alt_changed.connect(func(verb: String) -> void:
+		if not verb.is_empty():
+			_alt_button.label = verb
+		_set_button_visible(_alt_button, not verb.is_empty()))
 	_target_label = Label.new()
 	_target_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_target_label.size = Vector2(240, 24)
@@ -160,9 +165,7 @@ func _on_interaction_target_changed(verb: String, target_name: String) -> void:
 
 
 ## Botões de arma só aparecem quando fazem sentido.
-func _on_weapon_state_changed(kind: int, _ammo: String, has_weapons: bool) -> void:
-	_set_button_visible(_weapon_button, has_weapons)
-	_weapon_button.highlighted = kind != ItemData.WeaponKind.NONE
+func _on_weapon_state_changed(kind: int, _ammo: String, _has_weapons: bool) -> void:
 	_set_button_visible(_attack_button, kind != ItemData.WeaponKind.NONE)
 	_attack_button.label = "Atirar" if kind == ItemData.WeaponKind.PISTOL else "Atacar"
 	_set_button_visible(_reload_button, kind == ItemData.WeaponKind.PISTOL)

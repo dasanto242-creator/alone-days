@@ -672,6 +672,148 @@ def pickup(rig):
     finish(rig, act, cyclic=False)
 
 
+# ---------------------------------------------------------------- parkour
+# Trajetória do personagem (frente, altura) em metros por quadro-chave. O jogo usa EXATAMENTE
+# estas tabelas (scripts/player/parkour.gd) para mover o corpo, escalando para o obstáculo real.
+# Salto (vault): muro padrão de 1,0 m de altura, face a 0,5 m, espessura 0,3 m.
+VAULT_PATH = [(0, 0.0, 0.0), (6, 0.22, 0.0), (10, 0.42, 0.2), (14, 0.68, 0.32), (19, 1.0, 0.15),
+              (24, 1.3, 0.0), (28, 1.4, 0.0)]
+VAULT_H, VAULT_FACE, VAULT_THICK = 1.0, 0.5, 0.3
+# Escalada (climb): borda padrão de 1,5 m, face a 0,45 m.
+CLIMB_PATH = [(0, 0.0, 0.0), (5, 0.08, 0.0), (9, 0.2, 0.25), (16, 0.25, 0.75), (22, 0.35, 1.15),
+              (30, 0.6, 1.45), (37, 0.85, 1.5), (44, 0.9, 1.5)]
+CLIMB_H, CLIMB_FACE = 1.5, 0.45
+
+
+def path_at(path, f):
+    for (f0, a0, b0), (f1, a1, b1) in zip(path, path[1:]):
+        if f0 <= f <= f1:
+            t = (f - f0) / (f1 - f0)
+            return a0 + (a1 - a0) * t, b0 + (b1 - b0) * t
+    return path[-1][1], path[-1][2]
+
+
+def keyed(keys, f):
+    """Interpola (suave) tuplas numéricas entre quadros-chave: keys = [(quadro, (valores...)), ...]."""
+    for (f0, v0), (f1, v1) in zip(keys, keys[1:]):
+        if f0 <= f <= f1:
+            t = smooth((f - f0) / (f1 - f0))
+            return [a + (b - a) * t for a, b in zip(v0, v1)]
+    return list(keys[-1][1])
+
+
+def world_to_local(rig, pf, pu, x, fwd, up, ankle=False):
+    """Ponto fixo no mundo (relativo ao início do movimento) -> espaço da armadura no quadro atual."""
+    return Vector((x, -(fwd - pf), (rig.ground_ankle if ankle else 0.0) + up - pu))
+
+
+def vault(rig):
+    """Salto lateral sobre muro baixo (speed vault): mão esquerda apoia no topo, pernas passam de lado."""
+    frames = VAULT_PATH[-1][0]
+    act = new_action(rig, "vault", frames)
+    top = VAULT_H + 0.03
+    hand_l = (0.1, VAULT_FACE + 0.12, top)
+    # quadro: (queda do quadril, inclinação, rolagem, apoio da mão esq 0..1,
+    #          pé esq (x, frente local, altura local), pé dir (x, frente, altura))
+    keys = [
+        (0, (0.03, 6, 0, 0.0, 0.11, 0.05, 0.0, -0.11, -0.1, 0.0)),
+        (6, (0.14, 24, 0, 0.3, 0.12, 0.12, 0.0, -0.1, -0.15, 0.05)),
+        (10, (0.08, 30, -6, 1.0, 0.12, 0.15, 0.0, -0.2, -0.25, 0.45)),
+        (14, (0.0, 22, -14, 1.0, -0.12, -0.1, 0.62, -0.32, -0.25, 0.7)),
+        (19, (0.02, 12, -8, 0.4, -0.02, -0.15, 0.35, -0.2, -0.2, 0.3)),
+        (24, (0.22, 20, 0, 0.0, 0.12, 0.05, 0.0, -0.12, -0.12, 0.0)),
+        (28, (0.05, 6, 0, 0.0, 0.11, 0.02, 0.0, -0.11, -0.05, 0.0)),
+    ]
+    for f in range(frames + 1):
+        pf, pu = path_at(VAULT_PATH, f)
+        drop, lean, roll, plant, lx, ly, lz, rx, ry, rz = keyed(keys, f)
+        rig.begin()
+        rig.pelvis(Vector((0, 0, -drop)), roll=roll * 0.5)
+        rig.torso(lean=lean, roll=roll)
+        rig.head(pitch=lean * 0.4)
+        # pés: no apoio ficam no chão do mundo; no ar seguem a pose (relativa ao corpo)
+        on_ground = pu < 0.02
+        for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
+            target = Vector((x, -y, rig.ground_ankle + z - (0.0 if not on_ground else 0.0)))
+            if f >= 9 and pu > 0.0:
+                target.z = max(target.z, rig.ground_ankle + z)
+            rig.foot(side, target, pitch=-20 * min(z * 3, 1.0))
+        # mão esquerda: sobe até o topo do muro e fica apoiada enquanto o corpo passa
+        free_l = rig.shoulder_pos("L") + rig.chest_vec(Vector((0.12, -0.3, -0.3)))
+        planted = world_to_local(rig, pf, pu, *hand_l)
+        rig.hand("L", free_l.lerp(planted, plant), fist=0.1)
+        # mão direita: vai à frente para equilíbrio e aterrissagem
+        bal = keyed([(0, (-0.12, -0.25, -0.45)), (10, (-0.2, -0.45, -0.1)), (19, (-0.35, -0.3, -0.25)),
+                     (24, (-0.2, -0.35, -0.45)), (28, (-0.08, -0.05, -0.56))], f)
+        rig.hand("R", rig.shoulder_pos("R") + rig.chest_vec(Vector(bal)), fist=0.2)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def climb(rig):
+    """Escalada de borda alta (mantle): pula, agarra a borda, empurra, sobe um joelho e fica de pé."""
+    frames = CLIMB_PATH[-1][0]
+    act = new_action(rig, "climb", frames)
+    top = CLIMB_H + 0.02
+    edge = CLIMB_FACE + 0.06
+    # quadro: (queda do quadril, inclinação, mãos na borda 0..1, pés: modo parede/joelho)
+    keys = [
+        (0, (0.03, 4, 0.0)), (5, (0.2, 22, 0.0)), (9, (0.05, 10, 1.0)), (16, (0.0, 28, 1.0)),
+        (22, (0.12, 38, 1.0)), (30, (0.25, 30, 0.5)), (37, (0.12, 12, 0.0)), (44, (0.03, 4, 0.0))]
+    # pés no mundo (x, frente, altura): pé esq e dir em cada quadro-chave
+    feet_keys = [
+        (0, (0.11, 0.0, 0.0, -0.11, 0.0, 0.0)),
+        (5, (0.12, 0.05, 0.0, -0.12, 0.1, 0.0)),
+        (9, (0.12, 0.3, 0.3, -0.12, 0.38, 0.55)),
+        (16, (0.12, 0.38, 0.55, -0.12, 0.4, 0.85)),
+        (22, (0.12, 0.38, 0.75, -0.12, 0.62, top)),
+        (30, (0.12, 0.6, top + 0.15, -0.12, 0.66, top)),
+        (37, (0.12, 0.86, top, -0.12, 0.8, top)),
+        (44, (0.11, 0.9, top, -0.11, 0.9, top)),
+    ]
+    for f in range(frames + 1):
+        pf, pu = path_at(CLIMB_PATH, f)
+        drop, lean, grab = keyed(keys, f)
+        rig.begin()
+        rig.pelvis(Vector((0, 0, -drop)), pitch=lean * 0.2)
+        rig.torso(lean=lean)
+        rig.head(pitch=-10 + lean * 0.5)
+        lx, ly, lz, rx, ry, rz = keyed(feet_keys, f)
+        for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
+            near_wall = z > 0.05 and z < top - 0.05
+            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-30 if near_wall else 0)
+        for side in ("L", "R"):
+            sx = 1.0 if side == "L" else -1.0
+            reach = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.15, -0.35, 0.25)))
+            hold = world_to_local(rig, pf, pu, sx * 0.22, edge, top)
+            rest = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.08, -0.05, -0.55)))
+            target = reach.lerp(hold, grab) if f <= 9 else (hold if grab > 0.99 else rest.lerp(hold, grab))
+            if f < 5:
+                target = rest.lerp(reach, smooth(f / 5))
+            rig.hand(side, target, fist=0.35 + 0.4 * grab)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def hold_item(rig):
+    """Segurando um item na mão direita, à frente do corpo (camada do tronco/braços)."""
+    act = new_action(rig, "hold_item", 60)
+    for f in (0, 30, 60):
+        b = math.sin(2 * math.pi * f / 60)
+        rig.begin()
+        rig.pelvis(Vector((0, 0, -0.025)))
+        rig.torso(lean=3)
+        rig.head(pitch=6)
+        rig.foot("L", Vector((0.11, 0.0, rig.ground_ankle)))
+        rig.foot("R", Vector((-0.11, 0.0, rig.ground_ankle)))
+        arm_pendulum(rig, "L", 4, 14, out=0.08, fist=0.22)
+        grip = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.02, -0.3, -0.36 + 0.005 * b)))
+        rig.hand("R", grip, fwd=rig.chest_vec(Vector((0.3, -1.0, 0.3))), thumb=rig.chest_vec(Vector((0.0, 0.0, 1.0))),
+                 fist=0.85)
+        rig.key(f)
+    finish(rig, act)
+
+
 def create_all(arm):
     bpy.context.scene.render.fps = FPS
     rig = Rig(arm)
@@ -708,6 +850,9 @@ def create_all(arm):
     drink(rig)
     eat(rig)
     pickup(rig)
+    vault(rig)
+    climb(rig)
+    hold_item(rig)
     for pb in rig.pb:
         pb.rotation_quaternion = Quaternion()
         pb.location = Vector()

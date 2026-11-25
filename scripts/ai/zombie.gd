@@ -52,6 +52,7 @@ var _attack_hit_done := false
 var _current_anim := &""
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _dormant := false
+var _groan_timer := 0.0
 
 
 func _ready() -> void:
@@ -91,6 +92,12 @@ func _physics_process(delta: float) -> void:
 	_think_interval = 0.15 if dist < 20.0 else (0.4 if dist < 45.0 else 1.0)
 	_state_time += delta
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
+	_groan_timer -= delta
+	if _groan_timer <= 0.0:
+		var chasing := state in [State.CHASE, State.ALERT, State.ATTACK]
+		_groan_timer = randf_range(2.0, 4.0) if chasing else randf_range(5.0, 11.0)
+		if dist < 30.0:
+			Sfx.play_3d(&"zombie_groan", global_position + Vector3.UP * 1.6, 0.0 if chasing else -4.0, 0.12)
 	_think_timer -= delta
 	if _think_timer <= 0.0:
 		var dt := _think_interval - _think_timer
@@ -302,9 +309,11 @@ func apply_damage(amount: float, source: Node, point: Vector3) -> void:
 	health -= dmg
 	Events.hit_landed.emit(self, dmg, point)
 	_blood_burst(point)
+	Sfx.play_3d(&"hit_flesh", point)
 	if health <= 0.0:
 		_die()
 		return
+	Sfx.play_3d(&"zombie_hurt", global_position + Vector3.UP * 1.6, 0.0, 0.12)
 	# foi atacado: sabe onde o jogador está
 	awareness = 1.0
 	if source is Node3D:
@@ -326,6 +335,7 @@ func _die() -> void:
 	velocity = Vector3.ZERO
 	_play(&"z_death", 1.0, true)
 	_anim.active = true
+	Sfx.play_3d(&"zombie_death", global_position + Vector3.UP * 1.4)
 
 
 func _blood_burst(point: Vector3) -> void:
@@ -360,7 +370,11 @@ func _blood_burst(point: Vector3) -> void:
 func _set_state(s: State) -> void:
 	state = s
 	_state_time = 0.0
+	if s == State.ALERT:
+		Sfx.play_3d(&"zombie_groan", global_position + Vector3.UP * 1.6, 3.0, 0.1)
+		_groan_timer = randf_range(2.0, 3.5)
 	if s == State.ATTACK:
+		Sfx.play_3d(&"zombie_attack", global_position + Vector3.UP * 1.6, 0.0, 0.1)
 		_attack_hit_done = false
 		velocity.x = 0.0
 		velocity.z = 0.0

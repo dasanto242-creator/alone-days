@@ -18,6 +18,7 @@ func _init() -> void:
 	s.set_setting("autoload/GameSettings", "*res://scripts/core/game_settings.gd")
 	s.set_setting("autoload/Items", "*res://scripts/core/items.gd")
 	s.set_setting("autoload/TouchInput", "*res://scripts/input/touch_input.gd")
+	s.set_setting("autoload/Sfx", "*res://scripts/core/sfx.gd")
 
 	# Tela: base 1280x720, paisagem com sensor, escala para qualquer proporção
 	s.set_setting("display/window/size/viewport_width", 1280)
@@ -58,6 +59,11 @@ func _init() -> void:
 	_action("jump", [KEY_SPACE])
 	_action("crouch", [KEY_C])
 	_action("interact", [KEY_E])
+	_action("interact_alt", [KEY_G])
+	_action("weapon_1", [KEY_1])
+	_action("weapon_2", [KEY_2])
+	_action("weapon_3", [KEY_3])
+	_action("weapon_4", [KEY_4])
 	_action("inventory", [KEY_TAB, KEY_I])
 	_action("weapon", [KEY_Q])
 	_action("attack", [KEY_F])

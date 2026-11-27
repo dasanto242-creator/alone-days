@@ -14,7 +14,7 @@ extends Node
 ## distância e espessura reais do obstáculo, então mãos e pés caem no lugar certo.
 
 const FPS := 30.0
-const VAULT_PATH := [[0, 0.0, 0.0], [6, 0.22, 0.0], [10, 0.42, 0.2], [14, 0.68, 0.32], [19, 1.0, 0.15],
+const VAULT_PATH := [[0, 0.0, 0.0], [6, 0.22, 0.0], [10, 0.4, 0.34], [14, 0.68, 0.5], [19, 1.0, 0.24],
 	[24, 1.3, 0.0], [28, 1.4, 0.0]]
 const VAULT_H := 1.0
 const VAULT_FACE := 0.5
@@ -27,8 +27,8 @@ const MANTLE_PATH := [[0, 0.0, 0.0], [5, 0.15, 0.0], [10, 0.3, 0.35], [16, 0.42,
 	[28, 0.72, 0.9]]
 const MANTLE_H := 0.9
 const MANTLE_FACE := 0.4
-const CLIMB_HIGH_PATH := [[0, 0.0, 0.0], [6, 0.1, 0.0], [11, 0.3, 0.55], [16, 0.32, 0.22], [24, 0.33, 0.3],
-	[32, 0.33, 0.24], [42, 0.35, 0.85], [50, 0.38, 1.3], [58, 0.5, 1.75], [68, 0.78, 2.2], [78, 0.9, 2.2]]
+const CLIMB_HIGH_PATH := [[0, 0.0, 0.0], [6, 0.06, 0.0], [11, 0.14, 0.55], [16, 0.14, 0.22], [24, 0.15, 0.3],
+	[32, 0.15, 0.24], [42, 0.2, 0.85], [50, 0.3, 1.3], [58, 0.5, 1.75], [68, 0.78, 2.2], [78, 0.9, 2.2]]
 const CLIMB_HIGH_H := 2.2
 const CLIMB_HIGH_FACE := 0.45
 
@@ -162,7 +162,7 @@ func step(delta: float) -> Vector3:
 	_time += delta
 	var frame := minf(_time * FPS, _last_frame())
 	var fu := _path_at(frame)
-	var pos := _start + _fwd * _map_forward(fu.x) + Vector3.UP * _map_up(fu.y)
+	var pos := _start + _fwd * _map_forward(fu.x, frame) + Vector3.UP * _map_up(fu.y)
 	if kind == Kind.VAULT and frame >= 22.0 and not _sounded.has("land"):
 		_sounded["land"] = true
 		Sfx.play_3d(&"land", pos)
@@ -198,18 +198,21 @@ func _path_at(frame: float) -> Vector2:
 	return Vector2(last[1], last[2])
 
 
-## Trajetória padrão -> obstáculo real (distância até a face e espessura).
-func _map_forward(f: float) -> float:
+## Trajetória padrão -> obstáculo real. A diferença entre a distância real até a face e a padrão
+## é absorvida aos poucos até o quadro de contato (mãos/pés na parede): dali em diante o corpo fica
+## exatamente onde a animação espera, então nada atravessa a parede, mesmo começando colado nela.
+const CONTACT_FRAME := {Kind.VAULT: 10.0, Kind.CLIMB: 9.0, Kind.MANTLE: 10.0, Kind.CLIMB_HIGH: 11.0}
+
+
+func _map_forward(f: float, frame: float) -> float:
+	var std_face: float = {Kind.VAULT: VAULT_FACE, Kind.CLIMB: CLIMB_FACE, Kind.MANTLE: MANTLE_FACE,
+		Kind.CLIMB_HIGH: CLIMB_HIGH_FACE}[kind]
+	var k := smoothstep(0.0, CONTACT_FRAME[kind], frame)
+	var out := f + (_face - std_face) * k
 	if kind == Kind.VAULT:
-		if f <= VAULT_FACE:
-			return f * _face / VAULT_FACE
-		if f <= VAULT_FACE + VAULT_THICK:
-			return _face + (f - VAULT_FACE) * _thick / VAULT_THICK
-		return _face + _thick + (f - VAULT_FACE - VAULT_THICK)
-	var std_face: float = {Kind.CLIMB: CLIMB_FACE, Kind.MANTLE: MANTLE_FACE, Kind.CLIMB_HIGH: CLIMB_HIGH_FACE}[kind]
-	if f <= std_face:
-		return f * _face / std_face
-	return _face + (f - std_face)
+		# muro mais grosso ou mais fino que o padrão: ajusta enquanto passa por cima
+		out += (_thick - VAULT_THICK) * smoothstep(11.0, 19.0, frame)
+	return out
 
 
 func _map_up(u: float) -> float:

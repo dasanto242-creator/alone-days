@@ -39,3 +39,6 @@ signal interaction_alt_changed(verb: String)
 
 ## Armas do jogador mudaram (empunhou, guardou, pegou, gastou munição): a barra de armas atualiza.
 signal weapons_changed
+
+## Jogador entrou (vehicle) ou saiu (null) de um carro: a HUD troca os controles.
+signal vehicle_changed(vehicle: Node)

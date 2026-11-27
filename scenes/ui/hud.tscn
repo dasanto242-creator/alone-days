@@ -24,16 +24,16 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
-[node name="HUD" type="CanvasLayer" unique_id=1626212657]
+[node name="HUD" type="CanvasLayer" unique_id=1672400206]
 
-[node name="DamageFlash" type="ColorRect" parent="." unique_id=814652804]
+[node name="DamageFlash" type="ColorRect" parent="." unique_id=792687411]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("1_0h1do")
 
-[node name="MobileControls" type="Control" parent="." unique_id=1351359672]
+[node name="MobileControls" type="Control" parent="." unique_id=1394841933]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -41,21 +41,21 @@ anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("2_4d46k")
 
-[node name="SafeArea" type="Control" parent="MobileControls" unique_id=1904960268]
+[node name="SafeArea" type="Control" parent="MobileControls" unique_id=578989298]
 unique_name_in_owner = true
 anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Joystick" type="Control" parent="MobileControls/SafeArea" unique_id=1891212135]
+[node name="Joystick" type="Control" parent="MobileControls/SafeArea" unique_id=883964191]
 unique_name_in_owner = true
 anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("3_erw67")
 
-[node name="JumpButton" type="Control" parent="MobileControls/SafeArea" unique_id=809605892]
+[node name="JumpButton" type="Control" parent="MobileControls/SafeArea" unique_id=65630788]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(96, 96)
 anchors_preset = 0
@@ -72,7 +72,7 @@ action = &"jump"
 label = "Pular"
 radius = 48.0
 
-[node name="AttackButton" type="Control" parent="MobileControls/SafeArea" unique_id=936061183]
+[node name="AttackButton" type="Control" parent="MobileControls/SafeArea" unique_id=1507918488]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(108, 108)
 anchors_preset = 0
@@ -89,7 +89,7 @@ action = &"attack"
 label = "Atacar"
 radius = 54.0
 
-[node name="CrouchButton" type="Control" parent="MobileControls/SafeArea" unique_id=253513681]
+[node name="CrouchButton" type="Control" parent="MobileControls/SafeArea" unique_id=1764136353]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(76, 76)
 anchors_preset = 0
@@ -106,7 +106,7 @@ action = &"crouch"
 label = "Agachar"
 radius = 38.0
 
-[node name="SprintButton" type="Control" parent="MobileControls/SafeArea" unique_id=506555902]
+[node name="SprintButton" type="Control" parent="MobileControls/SafeArea" unique_id=89694779]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(76, 76)
 anchors_preset = 0
@@ -123,7 +123,7 @@ action = &"sprint"
 label = "Correr"
 radius = 38.0
 
-[node name="ReloadButton" type="Control" parent="MobileControls/SafeArea" unique_id=1295600986]
+[node name="ReloadButton" type="Control" parent="MobileControls/SafeArea" unique_id=1837446583]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(68, 68)
 anchors_preset = 0
@@ -140,7 +140,7 @@ action = &"reload"
 label = "Recarregar"
 radius = 34.0
 
-[node name="InteractButton" type="Control" parent="MobileControls/SafeArea" unique_id=53096177]
+[node name="InteractButton" type="Control" parent="MobileControls/SafeArea" unique_id=202904335]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(88, 88)
 anchors_preset = 0
@@ -155,7 +155,7 @@ offset_bottom = -76.0
 script = ExtResource("4_gonto")
 action = &"interact"
 
-[node name="AltInteractButton" type="Control" parent="MobileControls/SafeArea" unique_id=474122847]
+[node name="AltInteractButton" type="Control" parent="MobileControls/SafeArea" unique_id=900019227]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(72, 72)
 anchors_preset = 0
@@ -172,7 +172,58 @@ action = &"interact_alt"
 label = "Guardar"
 radius = 36.0
 
-[node name="WeaponHotbar" type="HBoxContainer" parent="MobileControls/SafeArea" unique_id=1447569207]
+[node name="GasButton" type="Control" parent="MobileControls/SafeArea" unique_id=250270726]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(112, 112)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -156.0
+offset_top = -166.0
+offset_right = -44.0
+offset_bottom = -54.0
+script = ExtResource("4_gonto")
+action = &"car_gas"
+label = "Acelerar"
+radius = 56.0
+
+[node name="BrakeButton" type="Control" parent="MobileControls/SafeArea" unique_id=1513959934]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(92, 92)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -284.0
+offset_top = -128.0
+offset_right = -192.0
+offset_bottom = -36.0
+script = ExtResource("4_gonto")
+action = &"car_brake"
+label = "Freio / Ré"
+radius = 46.0
+
+[node name="HandbrakeButton" type="Control" parent="MobileControls/SafeArea" unique_id=365625370]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(76, 76)
+anchors_preset = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -188.0
+offset_top = -300.0
+offset_right = -112.0
+offset_bottom = -224.0
+script = ExtResource("4_gonto")
+action = &"jump"
+label = "Freio de mão"
+radius = 38.0
+
+[node name="WeaponHotbar" type="HBoxContainer" parent="MobileControls/SafeArea" unique_id=1903225002]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_left = 0.5
@@ -185,7 +236,7 @@ offset_right = 170.0
 offset_bottom = -12.0
 script = ExtResource("5_cwdlq")
 
-[node name="SurvivalHud" type="Control" parent="MobileControls/SafeArea" unique_id=1751730245]
+[node name="SurvivalHud" type="Control" parent="MobileControls/SafeArea" unique_id=1571368851]
 anchors_preset = 0
 anchor_left = 1.0
 anchor_right = 1.0
@@ -195,7 +246,7 @@ offset_right = -18.0
 offset_bottom = 112.0
 script = ExtResource("6_o6xly")
 
-[node name="InventoryButton" type="Button" parent="MobileControls/SafeArea" unique_id=2097172181]
+[node name="InventoryButton" type="Button" parent="MobileControls/SafeArea" unique_id=122468397]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_left = 1.0
@@ -207,12 +258,12 @@ offset_bottom = 86.0
 script = ExtResource("7_we3sy")
 inventory_screen_path = NodePath("../../../InventoryScreen")
 
-[node name="WeaponHud" type="Control" parent="." unique_id=183772948]
+[node name="WeaponHud" type="Control" parent="." unique_id=835895343]
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("8_65nxt")
 
-[node name="Notifications" type="VBoxContainer" parent="." unique_id=1383786242]
+[node name="Notifications" type="VBoxContainer" parent="." unique_id=2144059361]
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
@@ -222,7 +273,7 @@ offset_right = 260.0
 offset_bottom = 200.0
 script = ExtResource("9_el1dq")
 
-[node name="PerformanceOverlay" type="PanelContainer" parent="." unique_id=258289793]
+[node name="PerformanceOverlay" type="PanelContainer" parent="." unique_id=1518615551]
 offset_left = 14.0
 offset_top = 12.0
 offset_right = 14.0
@@ -231,20 +282,20 @@ mouse_filter = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_pkwgd")
 script = ExtResource("10_gmc6u")
 
-[node name="VBox" type="VBoxContainer" parent="PerformanceOverlay" unique_id=1630288486]
+[node name="VBox" type="VBoxContainer" parent="PerformanceOverlay" unique_id=130759219]
 layout_mode = 2
 
-[node name="StatsLabel" type="Label" parent="PerformanceOverlay/VBox" unique_id=1953090702]
+[node name="StatsLabel" type="Label" parent="PerformanceOverlay/VBox" unique_id=1781282797]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.82, 0.84, 0.76, 1)
 text = "FPS --"
 
-[node name="Buttons" type="HBoxContainer" parent="PerformanceOverlay/VBox" unique_id=1024592148]
+[node name="Buttons" type="HBoxContainer" parent="PerformanceOverlay/VBox" unique_id=120347854]
 layout_mode = 2
 
-[node name="QualityButton" type="Button" parent="PerformanceOverlay/VBox/Buttons" unique_id=1903645384]
+[node name="QualityButton" type="Button" parent="PerformanceOverlay/VBox/Buttons" unique_id=490185895]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(132, 36)
 layout_mode = 2
@@ -252,7 +303,7 @@ focus_mode = 0
 theme_override_font_sizes/font_size = 13
 text = "Gráfico"
 
-[node name="FpsButton" type="Button" parent="PerformanceOverlay/VBox/Buttons" unique_id=234638393]
+[node name="FpsButton" type="Button" parent="PerformanceOverlay/VBox/Buttons" unique_id=1283783696]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(132, 36)
 layout_mode = 2
@@ -260,7 +311,7 @@ focus_mode = 0
 theme_override_font_sizes/font_size = 13
 text = "Limite"
 
-[node name="InventoryScreen" type="Control" parent="." unique_id=111413450]
+[node name="InventoryScreen" type="Control" parent="." unique_id=1802461042]
 unique_name_in_owner = true
 layout_mode = 3
 anchors_preset = 15
@@ -268,7 +319,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("11_1e6lo")
 
-[node name="DeathScreen" type="Control" parent="." unique_id=588241940]
+[node name="DeathScreen" type="Control" parent="." unique_id=1258690660]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

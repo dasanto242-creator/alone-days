@@ -177,12 +177,18 @@ class Rig:
         self.set("clavicle.R", chest @ q(Y, raise_r) @ q(Z, -fwd_r))
 
     # ------------------------------------------------------------ pernas
-    def foot(self, side, target, pitch=0.0, yaw=0.0):
-        """target: posição do tornozelo no mundo. pitch > 0: ponta do pé para cima."""
+    def foot(self, side, target, pitch=0.0, yaw=0.0, knee_out=0.0, knee_back=0.0):
+        """target: posição do tornozelo no mundo. pitch > 0: ponta do pé para cima.
+        knee_out: 0 = joelho para a frente; 1 = joelho para o lado (pé apoiado na parede, sem
+        o joelho entrar nela)."""
         l1, l2, rest_up, rest_low = self.leg[side]
         hip = self.pos(f"upperleg01.{side}")
         lateral = self.world("root") @ X
-        pole = self.world("root") @ FWD
+        out = lateral * (1.0 if side == "L" else -1.0)
+        pole = (self.world("root") @ FWD) * (1.0 - knee_out) + out * knee_out - (self.world("root") @ Z) * 0.25 * knee_out
+        if knee_back > 0.0:
+            # perna arrastada atrás do corpo: joelho aponta para trás e para baixo
+            pole = pole.lerp(-(self.world("root") @ FWD) - (self.world("root") @ Z) * 0.6, knee_back)
         knee, ankle = two_bone(hip, l1, l2, target, pole)
         self.set(f"upperleg01.{side}", basis(knee - hip, lateral) @ basis(rest_up, X).inverted())
         self.set(f"lowerleg01.{side}", basis(ankle - knee, lateral) @ basis(rest_low, X).inverted())
@@ -670,7 +676,7 @@ def pickup(rig):
 # Trajetória do personagem (frente, altura) em metros por quadro-chave. O jogo usa EXATAMENTE
 # estas tabelas (scripts/player/parkour.gd) para mover o corpo, escalando para o obstáculo real.
 # Salto (vault): muro padrão de 1,0 m de altura, face a 0,5 m, espessura 0,3 m.
-VAULT_PATH = [(0, 0.0, 0.0), (6, 0.22, 0.0), (10, 0.42, 0.2), (14, 0.68, 0.32), (19, 1.0, 0.15),
+VAULT_PATH = [(0, 0.0, 0.0), (6, 0.22, 0.0), (10, 0.4, 0.34), (14, 0.68, 0.5), (19, 1.0, 0.24),
               (24, 1.3, 0.0), (28, 1.4, 0.0)]
 VAULT_H, VAULT_FACE, VAULT_THICK = 1.0, 0.5, 0.3
 # Escalada (climb): borda padrão de 1,5 m, face a 0,45 m.
@@ -712,9 +718,10 @@ def vault(rig):
     keys = [
         (0, (0.03, 6, 0, 0.0, 0.11, 0.05, 0.0, -0.11, -0.1, 0.0)),
         (6, (0.14, 24, 0, 0.3, 0.12, 0.12, 0.0, -0.1, -0.15, 0.05)),
-        (10, (0.08, 30, -6, 1.0, 0.12, 0.15, 0.0, -0.2, -0.25, 0.45)),
-        (14, (0.0, 22, -14, 1.0, -0.12, -0.1, 0.62, -0.32, -0.25, 0.7)),
-        (19, (0.02, 12, -8, 0.4, -0.02, -0.15, 0.35, -0.2, -0.2, 0.3)),
+        (10, (0.08, 30, -6, 1.0, 0.12, -0.08, 0.06, -0.3, 0.05, 0.4)),
+        (12, (0.04, 26, -10, 1.0, 0.02, -0.08, 0.88, -0.38, -0.05, 0.75)),
+        (14, (0.0, 22, -14, 1.0, -0.15, 0.06, 0.88, -0.42, 0.06, 0.88)),
+        (19, (0.02, 12, -8, 0.4, -0.02, -0.05, 0.35, -0.2, -0.08, 0.3)),
         (24, (0.22, 20, 0, 0.0, 0.12, 0.05, 0.0, -0.12, -0.12, 0.0)),
         (28, (0.05, 6, 0, 0.0, 0.11, 0.02, 0.0, -0.11, -0.05, 0.0)),
     ]
@@ -731,7 +738,9 @@ def vault(rig):
             target = Vector((x, -y, rig.ground_ankle + z - (0.0 if not on_ground else 0.0)))
             if f >= 9 and pu > 0.0:
                 target.z = max(target.z, rig.ground_ankle + z)
-            rig.foot(side, target, pitch=-20 * min(z * 3, 1.0))
+            trailing = side == "L" and 8 <= f <= 14
+            rig.foot(side, target, pitch=-20 * min(z * 3, 1.0), knee_out=0.8 if pu > 0.05 and not trailing else 0.0,
+                     knee_back=0.9 if trailing else 0.0)
         # mão esquerda: sobe até o topo do muro e fica apoiada enquanto o corpo passa
         free_l = rig.shoulder_pos("L") + rig.chest_vec(Vector((0.12, -0.3, -0.3)))
         planted = world_to_local(rig, pf, pu, *hand_l)
@@ -758,9 +767,11 @@ def climb(rig):
     feet_keys = [
         (0, (0.11, 0.0, 0.0, -0.11, 0.0, 0.0)),
         (5, (0.12, 0.05, 0.0, -0.12, 0.1, 0.0)),
-        (9, (0.12, 0.3, 0.3, -0.12, 0.38, 0.55)),
-        (16, (0.12, 0.38, 0.55, -0.12, 0.4, 0.85)),
-        (22, (0.12, 0.38, 0.75, -0.12, 0.62, top)),
+        (9, (0.12, 0.28, 0.25, -0.12, 0.33, 0.38)),
+        (16, (0.12, 0.33, 0.55, -0.12, 0.33, 0.85)),
+        (19, (0.12, 0.33, 0.65, -0.12, 0.38, top + 0.14)),
+        (22, (0.12, 0.33, 0.75, -0.12, 0.62, top)),
+        (26, (0.12, 0.36, top + 0.16, -0.12, 0.64, top)),
         (30, (0.12, 0.6, top + 0.15, -0.12, 0.66, top)),
         (37, (0.12, 0.86, top, -0.12, 0.8, top)),
         (44, (0.11, 0.9, top, -0.11, 0.9, top)),
@@ -775,7 +786,8 @@ def climb(rig):
         lx, ly, lz, rx, ry, rz = keyed(feet_keys, f)
         for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
             near_wall = z > 0.05 and z < top - 0.05
-            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-30 if near_wall else 0)
+            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-30 if near_wall else 0,
+                     knee_out=0.9 if z > 0.05 else 0.0)
         for side in ("L", "R"):
             sx = 1.0 if side == "L" else -1.0
             reach = rig.shoulder_pos(side) + rig.chest_vec(Vector((sx * 0.15, -0.35, 0.25)))
@@ -909,8 +921,8 @@ MANTLE_PATH = [(0, 0.0, 0.0), (5, 0.15, 0.0), (10, 0.3, 0.35), (16, 0.42, 0.72),
 MANTLE_H, MANTLE_FACE = 0.9, 0.4
 # Escalada alta: pula, agarra a borda com os braços esticados, fica pendurado se esforçando (pés
 # raspando na parede), puxa o corpo, passa os cotovelos, engancha a perna e sobe. Padrão: 2,2 m.
-CLIMB_HIGH_PATH = [(0, 0.0, 0.0), (6, 0.1, 0.0), (11, 0.3, 0.55), (16, 0.32, 0.22), (24, 0.33, 0.3),
-                   (32, 0.33, 0.24), (42, 0.35, 0.85), (50, 0.38, 1.3), (58, 0.5, 1.75), (68, 0.78, 2.2),
+CLIMB_HIGH_PATH = [(0, 0.0, 0.0), (6, 0.06, 0.0), (11, 0.14, 0.55), (16, 0.14, 0.22), (24, 0.15, 0.3),
+                   (32, 0.15, 0.24), (42, 0.2, 0.85), (50, 0.3, 1.3), (58, 0.5, 1.75), (68, 0.78, 2.2),
                    (78, 0.9, 2.2)]
 CLIMB_HIGH_H, CLIMB_HIGH_FACE = 2.2, 0.45
 
@@ -923,7 +935,8 @@ def mantle_low(rig):
             (22, (0.15, 12, 0.3)), (28, (0.03, 4, 0.0))]
     feet_keys = [  # mundo: pé esq (x, frente, altura), pé dir
         (0, (0.11, 0.0, 0.0, -0.11, 0.0, 0.0)), (5, (0.12, 0.08, 0.0, -0.12, 0.15, 0.0)),
-        (10, (0.12, 0.1, 0.0, -0.12, 0.5, top)), (16, (0.12, 0.3, 0.45, -0.12, 0.55, top)),
+        (8, (0.12, 0.1, 0.0, -0.12, 0.3, top + 0.2)), (11, (0.12, 0.12, 0.0, -0.12, 0.5, top)),
+        (16, (0.12, 0.27, 0.42, -0.12, 0.55, top)), (19, (0.12, 0.32, top + 0.16, -0.12, 0.58, top)),
         (22, (0.12, 0.62, top, -0.12, 0.62, top)), (28, (0.11, 0.72, top, -0.11, 0.72, top))]
     for f in range(frames + 1):
         pf, pu = path_at(MANTLE_PATH, f)
@@ -934,7 +947,8 @@ def mantle_low(rig):
         rig.head(pitch=lean * 0.3)
         lx, ly, lz, rx, ry, rz = keyed(feet_keys, f)
         for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
-            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-20 if 0.05 < z < top - 0.05 else 0)
+            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-20 if 0.05 < z < top - 0.05 else 0,
+                     knee_out=0.85 if z > 0.05 else 0.0)
         for side in ("L", "R"):
             sx = 1.0 if side == "L" else -1.0
             on_top = world_to_local(rig, pf, pu, sx * 0.2, MANTLE_FACE + 0.12, top)
@@ -957,11 +971,12 @@ def climb_high(rig):
     # pés (mundo): no chão, depois raspando na parede (alternando) e por fim em cima
     feet_keys = [
         (0, (0.11, 0.0, 0.0, -0.11, 0.0, 0.0)), (6, (0.12, 0.06, 0.0, -0.12, 0.12, 0.0)),
-        (11, (0.12, 0.2, 0.3, -0.12, 0.25, 0.2)), (16, (0.12, 0.38, 0.45, -0.12, 0.3, 0.15)),
-        (20, (0.12, 0.36, 0.35, -0.12, 0.39, 0.62)), (24, (0.12, 0.39, 0.7, -0.12, 0.36, 0.45)),
-        (28, (0.12, 0.36, 0.5, -0.12, 0.39, 0.75)), (32, (0.12, 0.39, 0.8, -0.12, 0.37, 0.55)),
-        (42, (0.12, 0.38, 1.0, -0.12, 0.39, 1.25)), (50, (0.12, 0.38, 1.3, -0.12, 0.4, 1.55)),
-        (58, (0.12, 0.37, 1.5, -0.12, 0.62, top)), (68, (0.12, 0.7, top, -0.12, 0.78, top)),
+        (11, (0.12, 0.2, 0.3, -0.12, 0.24, 0.2)), (16, (0.12, 0.33, 0.35, -0.12, 0.3, 0.12)),
+        (20, (0.12, 0.31, 0.22, -0.12, 0.33, 0.45)), (24, (0.12, 0.33, 0.5, -0.12, 0.31, 0.3)),
+        (28, (0.12, 0.31, 0.32, -0.12, 0.33, 0.52)), (32, (0.12, 0.33, 0.55, -0.12, 0.32, 0.38)),
+        (42, (0.12, 0.32, 0.7, -0.12, 0.33, 0.9)), (50, (0.12, 0.33, 1.1, -0.12, 0.33, 1.3)),
+        (54, (0.12, 0.33, 1.25, -0.12, 0.4, top + 0.2)), (58, (0.12, 0.32, 1.45, -0.12, 0.62, top)),
+        (63, (0.12, 0.36, top + 0.18, -0.12, 0.7, top)), (68, (0.12, 0.7, top, -0.12, 0.78, top)),
         (78, (0.11, 0.9, top, -0.11, 0.9, top))]
     for f in range(frames + 1):
         pf, pu = path_at(CLIMB_HIGH_PATH, f)
@@ -976,7 +991,8 @@ def climb_high(rig):
         lx, ly, lz, rx, ry, rz = keyed(feet_keys, f)
         for side, x, y, z in (("L", lx, ly, lz), ("R", rx, ry, rz)):
             near_wall = 0.05 < z < top - 0.05
-            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-35 if near_wall else 0)
+            rig.foot(side, world_to_local(rig, pf, pu, x, y, z, ankle=True), pitch=-35 if near_wall else 0,
+                     knee_out=0.9 if near_wall or z > 0.05 else 0.0)
         for side in ("L", "R"):
             sx = 1.0 if side == "L" else -1.0
             hold = world_to_local(rig, pf, pu, sx * 0.24, edge, top)
@@ -992,6 +1008,144 @@ def climb_high(rig):
             pole = rig.chest_vec(Vector((sx * 0.6, 0.6, -0.4)))
             rig.hand(side, target, pole=pole, fist=0.5 + 0.4 * grab)
         rig.shoulders(raise_l=8 * strain, raise_r=8 * strain)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+# ---------------------------------------------------------------- carro (motorista)
+# Origem da armadura = marcador "Seat" do carro; posições vêm de car_layout.py (mesmas do modelo).
+import car_layout as CAR  # noqa: E402
+
+
+def _car(p):
+    return Vector(CAR.to_anim(p))
+
+
+def _rot_door(p, deg):
+    """Gira um ponto da porta em volta da dobradiça (porta abre para fora, para a esquerda)."""
+    hx, hy = CAR.DOOR_HINGE
+    a = math.radians(-deg)
+    dx, dy = p[0] - hx, p[1] - hy
+    return (hx + dx * math.cos(a) - dy * math.sin(a), hy + dx * math.sin(a) + dy * math.cos(a), p[2])
+
+
+STEER_C = None
+
+
+def _wheel_point(angle_deg):
+    """Ponto no aro do volante. 0° = topo; positivo = sentido horário visto pelo motorista."""
+    c = _car(CAR.STEER_CENTER)
+    t = math.radians(CAR.STEER_TILT_DEG)
+    up_plane = Vector((0.0, -math.cos(t), math.sin(t)))   # sobe e vai para frente no plano do volante
+    right = Vector((-1.0, 0.0, 0.0))                       # direita do motorista
+    a = math.radians(angle_deg)
+    return c + (up_plane * math.cos(a) + right * math.sin(a)) * CAR.STEER_RADIUS
+
+
+SEATED_PELVIS = Vector((0.0, 0.15, -0.45))
+FLOOR_Z = 0.31 - CAR.SEAT[2]
+
+
+def seated_base(rig, yaw=0.0, lean=-12.0, roll=0.0):
+    rig.pelvis(SEATED_PELVIS, yaw=yaw, pitch=-8)
+    rig.torso(lean=lean, roll=roll, yaw=yaw * 0.3)
+
+
+def seated_feet(rig, left_out=0.0):
+    rig.foot("R", Vector((-0.16, -0.62, FLOOR_Z + rig.ground_ankle + 0.02)), pitch=25)
+    pedal = Vector((0.14, -0.6, FLOOR_Z + rig.ground_ankle + 0.02))
+    rig.foot("L", pedal, pitch=25)
+
+
+def drive_pose(rig, name, steer):
+    """Sentado dirigindo: mãos no volante (10 e 2 horas) giradas `steer` graus, corpo acompanha a curva."""
+    act = new_action(rig, name, 2)
+    for f in (0, 2):
+        rig.begin()
+        seated_base(rig, lean=-12 + abs(steer) * 0.03, roll=-steer * 0.05)
+        rig.head(pitch=6, yaw=-steer * 0.15)
+        seated_feet(rig)
+        for side, base in (("L", -60.0), ("R", 60.0)):
+            sx = 1.0 if side == "L" else -1.0
+            pole = rig.chest_vec(Vector((sx * 0.6, 0.2, -0.8)))
+            rig.hand(side, _wheel_point(base + steer), pole=pole, fist=0.9)
+        rig.key(f)
+    finish(rig, act)
+
+
+def car_enter_pose(rig, f):
+    """Pose do quadro f (0..ENTER_FRAMES) da animação de entrar no carro pela porta do motorista."""
+    ex = _car(CAR.EXIT)
+    ground = ex.z
+    door = CAR.door_angle(f)
+    # quadro: pélvis (x, y, z relativos à origem), giro do corpo, inclinação, cabeça
+    keys = [
+        (0, (ex.x, ex.y, ground - 0.03, 0, 3, 0)),
+        (12, (ex.x, ex.y - 0.05, ground - 0.05, 8, 6, 0)),
+        (20, (0.42, 0.28, -0.28, 30, 24, 28)),
+        (30, (0.04, 0.16, -0.45, 32, 2, 10)),
+        (40, (0.0, 0.15, -0.45, 6, -10, 4)),
+        (56, (0.0, 0.15, -0.45, 0, -12, 6)),
+    ]
+    px, py, pz, yaw, lean, head = keyed(keys, f)
+    rig.begin()
+    rig.pelvis(Vector((px, py, pz)), yaw=yaw, pitch=-8 * smooth((f - 20) / 10))
+    rig.torso(lean=lean, yaw=yaw * 0.3)
+    rig.head(pitch=head)
+    gz = ground + rig.ground_ankle
+    fz = FLOOR_Z + rig.ground_ankle + 0.02
+    # pé direito: chão de fora -> entra no carro (passo) -> pedal
+    rf = keyed([(0, (ex.x - 0.11, ex.y, gz)), (12, (ex.x - 0.11, ex.y - 0.05, gz)),
+                (17, (0.3, -0.05, max(gz, fz) + 0.25)), (22, (0.0, -0.4, fz)), (56, (-0.16, -0.62, fz))], f)
+    # pé esquerdo: fica fora até sentar, depois sobe e entra
+    lf = keyed([(0, (ex.x + 0.11, ex.y, gz)), (30, (ex.x - 0.05, ex.y - 0.2, gz)),
+                (35, (0.45, -0.3, fz + 0.35)), (40, (0.14, -0.6, fz)), (56, (0.14, -0.6, fz))], f)
+    rig.foot("R", Vector(rf), pitch=20 * smooth((f - 22) / 8))
+    rig.foot("L", Vector(lf), pitch=20 * smooth((f - 38) / 6))
+    # mão direita: maçaneta externa (abre a porta) -> apoio no banco -> volante
+    handle = _car(_rot_door(CAR.HANDLE_OUT, door))
+    rest_r = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.08, -0.05, -0.55)))
+    if f <= 3:
+        rh = rest_r.lerp(handle, smooth(f / 3))
+    elif f <= 10:
+        rh = handle
+    elif f <= 20:
+        seat_edge = _car((CAR.SEAT[0] - 0.2, CAR.SEAT[1] + 0.05, 0.66))
+        rh = handle.lerp(seat_edge, smooth((f - 10) / 10))
+    elif f <= 46:
+        seat_edge = _car((CAR.SEAT[0] - 0.2, CAR.SEAT[1] + 0.05, 0.66))
+        rh = seat_edge.lerp(_wheel_point(60.0), smooth((f - 26) / 12))
+    else:
+        rh = _wheel_point(60.0)
+    rig.hand("R", rh, fist=0.8)
+    # mão esquerda: apoio no teto ao abaixar -> puxa a porta pela maçaneta interna -> volante
+    roof = _car((-0.7, CAR.SEAT[1] + 0.05, 1.5))
+    inner = _car(_rot_door((-0.8, -0.3, 0.86), door))
+    rest_l = rig.shoulder_pos("L") + rig.chest_vec(Vector((0.08, -0.05, -0.55)))
+    if f <= 12:
+        lh = rest_l
+    elif f <= 30:
+        lh = rest_l.lerp(roof, smooth((f - 12) / 6))
+    elif f <= 40:
+        lh = roof.lerp(_car(_rot_door((-0.8, -0.3, 0.86), CAR.DOOR_OPEN_DEG)), smooth((f - 30) / 8))
+    elif f <= 48:
+        lh = inner
+    else:
+        lh = inner.lerp(_wheel_point(-60.0), smooth((f - 48) / 8))
+    rig.hand("L", lh, pole=rig.chest_vec(Vector((0.6, 0.3, -0.6))), fist=0.75)
+
+
+def car_enter(rig):
+    frames = CAR.ENTER_FRAMES
+    act = new_action(rig, "car_enter", frames)
+    for f in range(0, frames + 1, 2):
+        car_enter_pose(rig, f)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+    # sair = entrar de trás para frente (abre a porta por dentro, põe a perna para fora, levanta, fecha)
+    act = new_action(rig, "car_exit", frames)
+    for f in range(0, frames + 1, 2):
+        car_enter_pose(rig, frames - f)
         rig.key(f)
     finish(rig, act, cyclic=False)
 
@@ -1055,6 +1209,10 @@ def create_all(arm):
     mantle_low(rig)
     climb_high(rig)
     hold_item(rig)
+    car_enter(rig)
+    drive_pose(rig, "drive", 0.0)
+    drive_pose(rig, "drive_left", -90.0)
+    drive_pose(rig, "drive_right", 90.0)
     for pb in rig.pb:
         pb.rotation_quaternion = Quaternion()
         pb.location = Vector()

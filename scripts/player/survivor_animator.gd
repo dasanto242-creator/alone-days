@@ -31,12 +31,13 @@ const LOCO: Array[StringName] = [&"idle", &"walk", &"walk_aim", &"run", &"sprint
 const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
 	&"hold_melee", &"hold_pistol", &"hold_item", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left",
 	&"run_right", &"crouch_walk_back", &"crouch_walk_left", &"crouch_walk_right", &"walk_aim", &"walk_aim_back",
-	&"walk_aim_left", &"walk_aim_right", &"fall"]
+	&"walk_aim_left", &"walk_aim_right", &"fall", &"drive", &"drive_left", &"drive_right"]
 const LANDS: Array[StringName] = [&"land", &"land_hard"]
 const AIR: Array[StringName] = [&"jump", &"jump_run", &"fall"]
 const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol", &"hold_item"]
 const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol"]
-const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb", &"mantle_low", &"climb_high"]
+const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb", &"mantle_low", &"climb_high",
+	&"car_enter", &"car_exit"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
 	"lowerarm", "wrist", "finger"]
 const ACTION_BONES := ["spine04", "spine03"]
@@ -285,6 +286,22 @@ func is_holding() -> bool:
 	return _held_prop != null
 
 
+## Sentado dirigindo (pose do motorista) e quanto o volante está virado (-1..1).
+func set_driving(on: bool) -> void:
+	_tree.set("parameters/seat/blend_amount", 1.0 if on else 0.0)
+	if on:
+		_hold_target = 0.0
+		_model.basis = _model_basis
+
+
+func set_drive_steer(amount: float) -> void:
+	_tree.set("parameters/drive_space/blend_position", clampf(amount, -1.0, 1.0))
+
+
+func is_driving() -> bool:
+	return float(_tree.get("parameters/seat/blend_amount")) > 0.5
+
+
 func is_using() -> bool:
 	return bool(_tree.get("parameters/use/active"))
 
@@ -449,12 +466,26 @@ func _build_tree() -> void:
 	bt.add_node("land", land)
 	bt.connect_node("land", 0, "action")
 	bt.connect_node("land", 1, "land_kind")
+	# sentado no carro: mistura de 3 poses pelo esterço (mãos acompanham o volante)
+	var drive := AnimationNodeBlendSpace1D.new()
+	drive.min_space = -1.0
+	drive.max_space = 1.0
+	for pair in [[&"drive_left", -1.0], [&"drive", 0.0], [&"drive_right", 1.0]]:
+		if _anim.has_animation(pair[0]):
+			var a := AnimationNodeAnimation.new()
+			a.animation = pair[0]
+			drive.add_blend_point(a, pair[1])
+	bt.add_node("drive_space", drive)
+	var seat := AnimationNodeBlend2.new()
+	bt.add_node("seat", seat)
+	bt.connect_node("seat", 0, "land")
+	bt.connect_node("seat", 1, "drive_space")
 	_transition(bt, "use_kind", USES, 0.0)
 	var use := AnimationNodeOneShot.new()
 	use.fadein_time = 0.2
 	use.fadeout_time = 0.3
 	bt.add_node("use", use)
-	bt.connect_node("use", 0, "land")
+	bt.connect_node("use", 0, "seat")
 	bt.connect_node("use", 1, "use_kind")
 	bt.connect_node("output", 0, "use")
 	_tree = AnimationTree.new()
@@ -465,6 +496,7 @@ func _build_tree() -> void:
 	_tree.active = true
 	_tree.set("parameters/hold/blend_amount", 0.0)
 	_tree.set("parameters/loco_speed/scale", 1.0)
+	_tree.set("parameters/seat/blend_amount", 0.0)
 	var _unused := loco
 
 

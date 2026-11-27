@@ -63,6 +63,13 @@ const STEP_NOISE := {"crouch": 1.5, "walk": 4.0, "jog": 9.0, "sprint": 16.0}
 @onready var _interaction_area: Area3D = $Visual/InteractionArea
 @onready var parkour: Parkour = $Parkour
 
+## Carro em que está (null = a pé) e etapa: "enter", "drive", "exit".
+var vehicle: Vehicle = null
+var _vehicle_stage := ""
+var _vehicle_time := 0.0
+var _approach_from := Vector3.ZERO
+const VEHICLE_MASK := 32
+
 ## Item consumível na mão (pego do chão com "Pegar"): Consumir ou Guardar.
 var held: ItemStack = null
 var _pending_hold := false
@@ -87,6 +94,9 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if vehicle != null:
+		_vehicle_process(delta)
+		return
 	if parkour.is_active():
 		global_position = parkour.step(delta)
 		velocity = Vector3.ZERO
@@ -169,6 +179,139 @@ func _finish_action() -> void:
 		if weapons and inventory.equipped(_rewield_slot) != null and weapons.wielded_slot == -1:
 			weapons.set_wielded(_rewield_slot)
 		_rewield_slot = -1
+
+
+# ---------------------------------------------------------------- carro
+
+## Entra no carro pela porta do motorista: vai até a porta, abre, senta, fecha e põe as mãos no volante.
+func enter_vehicle(v: Vehicle) -> void:
+	if vehicle != null or v.is_occupied() or _busy > 0.0 or stats.is_dead or parkour.is_active():
+		return
+	if held != null and not store_held():
+		return
+	_lower_weapon()
+	_rewield_slot = -1
+	_set_sprinting(false)
+	if is_crouching:
+		_set_crouching(false)
+	vehicle = v
+	v.set_driver(self)
+	_vehicle_stage = "approach"
+	_vehicle_time = 0.0
+	_approach_from = global_position
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	Events.interaction_target_changed.emit("", "")
+	Events.interaction_alt_changed.emit("")
+
+
+## Sai do carro (só parado ou quase parado).
+func exit_vehicle() -> bool:
+	if vehicle == null or _vehicle_stage != "drive":
+		return false
+	if vehicle.speed_kmh > 6.0:
+		Events.notify.emit("Pare o carro para sair")
+		return false
+	var out := vehicle.exit_position()
+	var shape := CapsuleShape3D.new()
+	shape.radius = _capsule.radius
+	shape.height = stand_height
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.transform = Transform3D(Basis(), out + Vector3.UP * (stand_height * 0.5 + 0.05))
+	q.collision_mask = 1 | VEHICLE_MASK | 16
+	q.exclude = [vehicle.get_rid()]
+	if not get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty():
+		Events.notify.emit("Sem espaço para abrir a porta")
+		return false
+	_vehicle_stage = "exit"
+	_vehicle_time = 0.0
+	_last_prompt = ""
+	Events.interaction_target_changed.emit("", "")
+	Events.interaction_alt_changed.emit("")
+	vehicle.throttle = 0.0
+	vehicle.steer_input = 0.0
+	vehicle.handbrake = true
+	_animator.set_driving(false)
+	_animator.play_use(&"car_exit")
+	vehicle.play_door(true)
+	if _camera_rig:
+		_camera_rig.set_vehicle(null)
+	Events.vehicle_changed.emit(null)
+	return true
+
+
+func in_vehicle() -> bool:
+	return vehicle != null
+
+
+func _vehicle_process(delta: float) -> void:
+	_vehicle_time += delta
+	var seat := vehicle.seat_transform()
+	match _vehicle_stage:
+		"approach":
+			# anda até ao lado da porta, já virado para a frente do carro
+			var out := vehicle.exit_position()
+			var t := clampf(_vehicle_time / 0.35, 0.0, 1.0)
+			global_position = _approach_from.lerp(Vector3(out.x, out.y, out.z), t)
+			_visual.rotation.y = lerp_angle(_visual.rotation.y, vehicle.global_rotation.y, 1.0 - exp(-14.0 * delta))
+			_animator.update_pose(1.0 if t < 1.0 else 0.0, sprint_speed, true, false, delta)
+			if t >= 1.0:
+				_vehicle_stage = "enter"
+				_vehicle_time = 0.0
+				_place_in_seat(seat)
+				_animator.play_use(&"car_enter")
+				vehicle.play_door(false)
+		"enter":
+			_place_in_seat(seat)
+			if _vehicle_time >= float(Vehicle.ENTER_FRAMES) / 30.0 - 0.05:
+				_vehicle_stage = "drive"
+				_animator.set_driving(true)
+				if _camera_rig:
+					_camera_rig.set_vehicle(vehicle)
+				vehicle.handbrake = false
+				Events.vehicle_changed.emit(vehicle)
+				Events.notify.emit("Acelerar / Freio-Ré (ou joystick) · joystick vira o volante · Freio de mão")
+		"drive":
+			_place_in_seat(seat)
+			vehicle.throttle = maxf(Input.get_action_strength("move_forward"), Input.get_action_strength("car_gas"))
+			vehicle.brake = maxf(Input.get_action_strength("move_back"), Input.get_action_strength("car_brake"))
+			vehicle.steer_input = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
+			vehicle.handbrake = Input.is_action_pressed("jump")
+			_animator.set_drive_steer(vehicle.steer_amount())
+			if Input.is_action_just_pressed("interact"):
+				exit_vehicle()
+			var prompt := "Sair" if vehicle.speed_kmh <= 6.0 else ""
+			if prompt != _last_prompt:
+				_last_prompt = prompt
+				Events.interaction_target_changed.emit(prompt, "")
+		"exit":
+			_place_in_seat(seat)
+			if _vehicle_time >= float(Vehicle.ENTER_FRAMES) / 30.0 - 0.05:
+				_leave_vehicle()
+
+
+func _place_in_seat(seat: Transform3D) -> void:
+	global_transform = Transform3D(seat.basis.orthonormalized(), seat.origin)
+	_visual.rotation = Vector3.ZERO
+	velocity = Vector3.ZERO
+
+
+func _leave_vehicle() -> void:
+	var v := vehicle
+	var yaw := v.global_rotation.y
+	var out := v.exit_position()
+	vehicle = null
+	_vehicle_stage = ""
+	global_transform = Transform3D(Basis(), out + Vector3.UP * 0.05)
+	_visual.rotation = Vector3(0, yaw, 0)
+	reset_physics_interpolation()
+	collision_layer = 2
+	collision_mask = 1 | 16 | VEHICLE_MASK
+	v.set_driver(null)
+	_last_prompt = ""
+	Events.interaction_target_changed.emit("", "")
 
 
 ## Começa um salto/escalada (chamado pelo Parkour).

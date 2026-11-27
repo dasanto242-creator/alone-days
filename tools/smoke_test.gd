@@ -372,6 +372,7 @@ func _run_stage2() -> void:
 
 	await _run_weapons()
 	await _run_parkour_axe()
+	await _run_vehicle()
 	await _run_zombie()
 
 	# --- Morte
@@ -489,6 +490,17 @@ func _run_parkour_axe() -> void:
 	stats.health = 100.0
 	await get_tree().create_timer(0.8).timeout
 
+	# --- O corpo não pode entrar nas paredes durante o parkour (juntas do esqueleto x colisão)
+	for c in [["salto na cerca", Vector3(5.9, 0.05, 12.0), -PI / 2], ["muro alto", Vector3(16.5, 0.05, 5.4), 0.0],
+			["muro alto, colado", Vector3(16.5, 0.05, 4.8), 0.0], ["plataforma", Vector3(12.0, 0.05, -7.0), PI]]:
+		stats.stamina = 100.0
+		_teleport(c[1], 0.0)
+		visual.rotation.y = c[2]
+		await _frames(8)
+		var bad := await _clip_frames()
+		_check("Corpo não atravessa a parede (%s): %d quadros" % [c[0], bad], bad <= 2)
+		await _frames(10)
+
 	# chão livre: Pular continua sendo um pulo normal
 	_teleport(Vector3(0, 0.05, 22.0), 0.0)
 	await _frames(8)
@@ -540,6 +552,79 @@ func _run_parkour_axe() -> void:
 	_check("Vento ambiente tocando em loop", Sfx.get("_ambient") != null and (Sfx.get("_ambient") as AudioStreamPlayer).playing)
 	stats.health = 100.0
 	stats.stamina = 100.0
+
+
+# ================================================================ CARRO
+
+func _run_vehicle() -> void:
+	print("\n-- Carro --")
+	var world := _player.get_parent()
+	var car := world.get_node("Car") as Vehicle
+	var weapons := _player.get_node("Weapons") as WeaponHandler
+	if weapons.wielded_slot != -1:
+		weapons.set_wielded(-1)
+	var start_pos := car.global_position
+	_check("Carro parado sobre as 4 rodas (altura %.2f, inclinação %.1f°)" % [start_pos.y,
+		rad_to_deg(car.global_basis.y.angle_to(Vector3.UP))], absf(start_pos.y) < 0.08
+		and car.global_basis.y.angle_to(Vector3.UP) < deg_to_rad(3.0))
+	_teleport(car.exit_position() + Vector3.UP * 0.05, car.global_rotation.y)
+	await _frames(8)
+	var interact_btn := _hud.get_node("%InteractButton") as ActionButton
+	_check("Perto da porta aparece 'Entrar' (%s)" % interact_btn.label, interact_btn.visible and interact_btn.label == "Entrar")
+	var door := car.find_child("Door_FL", true, false) as Node3D
+	var base_door := door.basis
+	await _tap_action("interact")
+	await get_tree().create_timer(0.5).timeout
+	var animator := _player.get_node("Visual") as SurvivorAnimator
+	var tree := animator.get("_tree") as AnimationTree
+	_check("Animação de entrar no carro", tree.get("parameters/use_kind/current_state") == "car_enter")
+	await get_tree().create_timer(0.3).timeout
+	var door_angle := rad_to_deg(door.basis.get_euler().y - base_door.get_euler().y)
+	_check("Porta abre enquanto entra (%.0f°)" % door_angle, absf(door_angle) > 30.0)
+	await get_tree().create_timer(1.5).timeout
+	_check("Sentado ao volante, porta fechada", _player.in_vehicle() and _player.get("_vehicle_stage") == "drive"
+		and door.basis.is_equal_approx(base_door))
+	_check("Pose de dirigir", animator.is_driving())
+	var gas := _hud.get_node("%GasButton") as ActionButton
+	var jump_btn := _hud.get_node("%JumpButton") as ActionButton
+	_check("Controles de direção: Acelerar e Freio de mão; Pular some", gas.visible and
+		(_hud.get_node("%HandbrakeButton") as ActionButton).visible and not jump_btn.visible)
+	Input.action_press("car_gas")
+	await get_tree().create_timer(2.5).timeout
+	_check("Acelera (%.0f km/h)" % car.speed_kmh, car.speed_kmh > 20.0)
+	_check("Pede para parar antes de sair", not _player.exit_vehicle())
+	var yaw0 := car.global_rotation.y
+	Input.action_press("move_right", 1.0)
+	await get_tree().create_timer(1.0).timeout
+	var steer := car.steer_amount()
+	Input.action_release("move_right")
+	Input.action_release("car_gas")
+	_check("Volante vira aos poucos e o carro faz a curva (%.0f°)" % rad_to_deg(wrapf(car.global_rotation.y - yaw0, -PI, PI)),
+		absf(wrapf(car.global_rotation.y - yaw0, -PI, PI)) > deg_to_rad(10.0) and steer > 0.5)
+	_check("Mãos acompanham o volante", float(tree.get("parameters/drive_space/blend_position")) > 0.3)
+	Input.action_press("car_brake")
+	var min_speed := 999.0
+	for i in 30:
+		await get_tree().create_timer(0.1).timeout
+		min_speed = minf(min_speed, car.speed_kmh)
+	_check("Freia até parar (%.1f km/h)" % min_speed, min_speed < 2.0)
+	await get_tree().create_timer(1.0).timeout
+	_check("Segurando o freio parado, engata a ré", car.gear == -1)
+	Input.action_release("car_brake")
+	Input.action_press("jump")
+	await get_tree().create_timer(1.5).timeout
+	Input.action_release("jump")
+	await _tap_action("interact")
+	await get_tree().create_timer(2.3).timeout
+	_check("Sai do carro e fica em pé ao lado da porta", not _player.in_vehicle() and _player.is_on_floor()
+		and _player.global_position.distance_to(car.exit_position()) < 0.6)
+	_check("Volta a colidir normalmente", _player.collision_layer == 2 and (_player.collision_mask & 32) != 0)
+	_check("Controles a pé voltam", jump_btn.visible and not gas.visible)
+	# devolve o carro ao lugar para não atrapalhar os outros testes
+	car.linear_velocity = Vector3.ZERO
+	car.angular_velocity = Vector3.ZERO
+	car.global_transform = Transform3D(Basis(), start_pos + Vector3.UP * 0.4)
+	await get_tree().create_timer(0.8).timeout
 
 
 # ================================================================ ZUMBI
@@ -781,6 +866,40 @@ func _click(pos: Vector2) -> void:
 		ev.global_position = pos
 		ev.pressed = pressed
 		_send(ev)
+
+
+## Faz o parkour e conta os quadros com alguma junta do corpo (exceto mãos) dentro do mundo.
+func _clip_frames() -> int:
+	const BONES := ["pelvis", "spine03", "spine01", "neck01", "head", "upperleg01.L", "upperleg01.R",
+		"lowerleg01.L", "lowerleg01.R", "foot.L", "foot.R", "upperarm01.L", "upperarm01.R",
+		"lowerarm01.L", "lowerarm01.R"]
+	if not _player.parkour.try_start():
+		return 999
+	var sk := _player.find_child("Skeleton3D", true, false) as Skeleton3D
+	var space := _player.get_world_3d().direct_space_state
+	var q := PhysicsPointQueryParameters3D.new()
+	q.collision_mask = 1
+	q.exclude = [_player.get_rid()]
+	var bad := 0
+	while _player.parkour.is_active():
+		await get_tree().physics_frame
+		await get_tree().process_frame
+		for b in BONES:
+			var idx := sk.find_bone(b)
+			if idx < 0:
+				continue
+			# tolerância de 3 cm (raio da junta)
+			var p := sk.global_transform * sk.get_bone_global_pose(idx).origin
+			var inside := true
+			for d in [Vector3.UP, Vector3.DOWN, Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]:
+				q.position = p + d * 0.03
+				if space.intersect_point(q, 1).is_empty():
+					inside = false
+					break
+			if inside:
+				bad += 1
+				break
+	return bad
 
 
 func _teleport(pos: Vector3, _yaw: float) -> void:

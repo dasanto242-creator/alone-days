@@ -311,6 +311,56 @@ def world():
     save("ui_click", bp(noise(0.04), 1500, 5000) * env(int(0.04 * SR), 0.0005, 0.008), 0.35)
 
 
+def car():
+    # motor em marcha lenta-média (loop perfeito: 1 s = 50 ciclos de 50 Hz); o jogo muda o tom pela rotação
+    d = 1.0
+    t = t_axis(d)
+    f0 = 50.0
+    x = np.zeros_like(t)
+    for k, g in ((1, 1.0), (2, 0.6), (3, 0.35), (4, 0.25), (6, 0.12), (8, 0.08)):
+        x += g * np.sin(2 * np.pi * f0 * k * t + k * 0.7)
+    pulses = (np.sin(2 * np.pi * f0 * t) > 0.6).astype(float)
+    rumble = lp(noise(d), 300) * 0.5 * (0.6 + 0.4 * pulses)
+    x = lp(x * (0.8 + 0.2 * pulses) + rumble, 1800)
+    n = len(x)
+    xf = int(0.05 * SR)
+    x[:xf] = x[:xf] * np.linspace(0, 1, xf) + x[-xf:] * np.linspace(1, 0, xf)
+    x = x[: n - xf]
+    _save_raw("engine_loop", x, 0.7)
+    # pneu cantando (loop)
+    d = 1.3
+    t = t_axis(d)
+    squeal = np.sin(2 * np.pi * (950 + 60 * np.sin(2 * np.pi * 3 * t)) * t) * 0.5
+    sk = bp(noise(d), 600, 2500) * 0.6 + squeal * (0.6 + 0.4 * lp(rng.uniform(0, 1, len(t)), 6))
+    xf = int(0.1 * SR)
+    sk[:xf] = sk[:xf] * np.linspace(0, 1, xf) + sk[-xf:] * np.linspace(1, 0, xf)
+    _save_raw("tire_skid", sk[: len(sk) - xf], 0.6)
+    # porta do carro: trinco + batida abafada
+    latch = bp(noise(0.05), 1500, 6000) * env(int(0.05 * SR), 0.0005, 0.01)
+    thunk = lp(brown(0.5), 180) * env(int(0.5 * SR), 0.002, 0.12) * 2 + \
+        bp(noise(0.5), 300, 1200) * env(int(0.5 * SR), 0.002, 0.06) * 0.5
+    save("car_door", mix(0.55, (latch, 0.0), (thunk, 0.03)), 0.8)
+    # batida: impacto metálico com chacoalhar de peças
+    d = 1.2
+    impact = lp(brown(d), 250) * env(int(d * SR), 0.002, 0.25) * 2.5
+    metal = sum(tone(f, d, "sin") * env(int(d * SR), 0.001, 0.3 + 0.1 * i) * g
+                for i, (f, g) in enumerate(((310, 0.5), (523, 0.35), (811, 0.25), (1290, 0.15))))
+    rattle = bp(noise(d), 2000, 6000) * env(int(d * SR), 0.01, 0.4) * (rng.uniform(0, 1, int(d * SR)) > 0.9) * 0.6
+    save("car_crash", impact + metal + rattle, 0.95)
+
+
+def _save_raw(name, x, peak):
+    """Salva sem fade (loops precisam emendar sem cortar o volume)."""
+    x = norm(np.asarray(x, dtype=float), peak)
+    data = (np.clip(x, -1, 1) * 32767).astype("<i2")
+    with wave.open(os.path.join(OUT, name + ".wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(data.tobytes())
+    print(f"{name:16s} {len(x) / SR:5.2f} s (loop)")
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     footsteps()
@@ -322,3 +372,4 @@ if __name__ == "__main__":
     player_sounds()
     consumables()
     world()
+    car()

@@ -49,6 +49,7 @@ func _init() -> void:
 	s.set_setting("layer_names/3d_physics/layer_3", "interactable")
 	s.set_setting("layer_names/3d_physics/layer_4", "trigger")
 	s.set_setting("layer_names/3d_physics/layer_5", "enemy")
+	s.set_setting("layer_names/3d_physics/layer_6", "vehicle")
 
 	# Ações (teclado para testar no PC; no celular os controles touch acionam as mesmas)
 	_action("move_forward", [KEY_W, KEY_UP], 0.05)
@@ -60,6 +61,8 @@ func _init() -> void:
 	_action("crouch", [KEY_C])
 	_action("interact", [KEY_E])
 	_action("interact_alt", [KEY_G])
+	_action("car_gas", [KEY_UP])
+	_action("car_brake", [KEY_DOWN])
 	_action("weapon_1", [KEY_1])
 	_action("weapon_2", [KEY_2])
 	_action("weapon_3", [KEY_3])

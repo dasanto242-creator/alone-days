@@ -29,6 +29,12 @@ var _target_label: Label
 @onready var _attack_button: ActionButton = %AttackButton
 @onready var _reload_button: ActionButton = %ReloadButton
 @onready var _alt_button: ActionButton = %AltInteractButton
+@onready var _jump_button: ActionButton = %JumpButton
+@onready var _gas_button: ActionButton = %GasButton
+@onready var _brake_button: ActionButton = %BrakeButton
+@onready var _handbrake_button: ActionButton = %HandbrakeButton
+var _driving := false
+var _weapon_kind := 0
 
 
 func _ready() -> void:
@@ -55,6 +61,9 @@ func _ready() -> void:
 	Events.weapon_state_changed.connect(_on_weapon_state_changed)
 	_on_weapon_state_changed(ItemData.WeaponKind.NONE, "", false)
 	Events.player_movement_state_changed.connect(_on_player_movement_state_changed)
+	Events.vehicle_changed.connect(_on_vehicle_changed)
+	for b in [_gas_button, _brake_button, _handbrake_button]:
+		b.visible = false
 	get_viewport().size_changed.connect(_apply_safe_area)
 	_apply_safe_area()
 
@@ -166,6 +175,9 @@ func _on_interaction_target_changed(verb: String, target_name: String) -> void:
 
 ## Botões de arma só aparecem quando fazem sentido.
 func _on_weapon_state_changed(kind: int, _ammo: String, _has_weapons: bool) -> void:
+	_weapon_kind = kind
+	if _driving:
+		return
 	_set_button_visible(_attack_button, kind != ItemData.WeaponKind.NONE)
 	_attack_button.label = "Atirar" if kind == ItemData.WeaponKind.PISTOL else "Atacar"
 	_set_button_visible(_reload_button, kind == ItemData.WeaponKind.PISTOL)
@@ -180,6 +192,23 @@ func _set_button_visible(button: ActionButton, value: bool) -> void:
 			if _button_fingers[finger] == button:
 				button.release()
 				_button_fingers.erase(finger)
+
+
+## Dirigindo: some tudo que é de quem está a pé e aparecem os pedais e o freio de mão.
+## O joystick vira o volante (e também acelera/freia, para quem preferir um dedo só).
+func _on_vehicle_changed(vehicle: Node) -> void:
+	_driving = vehicle != null
+	for b in [_jump_button, _crouch_button, _sprint_button]:
+		_set_button_visible(b, not _driving)
+	if _driving:
+		_set_button_visible(_alt_button, false)
+	for b in [_gas_button, _brake_button, _handbrake_button]:
+		_set_button_visible(b, _driving)
+	if _driving:
+		_set_button_visible(_attack_button, false)
+		_set_button_visible(_reload_button, false)
+	else:
+		_on_weapon_state_changed(_weapon_kind, "", false)
 
 
 func _on_player_movement_state_changed(is_crouching: bool, is_sprinting: bool) -> void:

@@ -121,6 +121,23 @@
     fôlego (sem fôlego não sobe).
 - Área de treino no cenário: bloco de 0,8 m e muro de 2,2 m perto da plataforma.
 
+## Ajustes de 26/11 — escalada sem atravessar parede e carro
+- Escaladas e saltos não entram mais nas paredes: pés apoiados 12 cm antes da face (só a ponta
+  toca), joelhos para o lado quando o pé está na parede, perna de trás arrastada com o joelho
+  para trás no salto, pé sobe acima da quina antes de pisar em cima. Começar colado na parede
+  também funciona (a distância é ajustada aos poucos até o contato). Teste automático mede cada
+  junta do esqueleto contra a colisão (`tools/clip_check.gd` e smoke test).
+- Carro (hatch próprio, modelado por código: carroceria, vidros, porta do motorista que abre,
+  volante, bancos, painel, rodas):
+  - Física própria por roda (mola, amortecedor, barra estabilizadora, aderência com círculo de
+    atrito: derrapa no limite), tração dianteira, curva de torque, câmbio automático de 5 marchas,
+    ré segurando o freio parado, freio de mão travando a traseira, direção suave e menos sensível
+    em alta, sobe meio-fio sem "decolar", atropela zumbis, sons de motor (rotação), pneu e batida.
+  - Entrar: vai até a porta, abre, entra de lado e fecha; sentado com as mãos no volante, que
+    acompanham o giro. Sair: só parado (abre, sai e fecha). Câmera segue atrás do carro.
+  - Controles: Acelerar, Freio/Ré e Freio de mão; o joystick vira o volante (e também
+    acelera/freia). Teclado: setas/WASD, Espaço = freio de mão, E = entrar/sair.
+
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).
 - ~22 mil triângulos, 67 ossos, texturas próprias comprimidas para celular.

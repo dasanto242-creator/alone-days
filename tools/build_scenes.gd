@@ -118,7 +118,7 @@ func _block(parent: Node, node_name: String, size: Vector3, pos: Vector3, color:
 func _build_player() -> Node:
 	var player := _node(CharacterBody3D, "Player", null, "res://scripts/player/player_controller.gd") as CharacterBody3D
 	player.collision_layer = LAYER_PLAYER
-	player.collision_mask = LAYER_WORLD | LAYER_ENEMY  # não atravessa zumbis
+	player.collision_mask = LAYER_WORLD | LAYER_ENEMY | 32  # não atravessa zumbis nem carros
 	player.floor_max_angle = deg_to_rad(46.0)
 	player.floor_snap_length = 0.35
 
@@ -159,7 +159,7 @@ func _build_player() -> Node:
 func _build_zombie() -> Node:
 	var z := _node(CharacterBody3D, "Zombie", null, "res://scripts/ai/zombie.gd") as CharacterBody3D
 	z.collision_layer = LAYER_ENEMY
-	z.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_ENEMY
+	z.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_ENEMY | 32
 	z.floor_snap_length = 0.3
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.28
@@ -225,6 +225,10 @@ func _build_hud() -> Node:
 	_button(safe, "ReloadButton", "reload", "Recarregar", 34.0, Vector2(-196, -262))
 	_button(safe, "InteractButton", "interact", "", 44.0, Vector2(-420, -120))
 	_button(safe, "AltInteractButton", "interact_alt", "Guardar", 36.0, Vector2(-420, -238))
+	# dirigindo: pedais à direita, freio de mão acima
+	_button(safe, "GasButton", "car_gas", "Acelerar", 56.0, Vector2(-100, -110))
+	_button(safe, "BrakeButton", "car_brake", "Freio / Ré", 46.0, Vector2(-238, -82))
+	_button(safe, "HandbrakeButton", "jump", "Freio de mão", 38.0, Vector2(-150, -262))
 	# barra de armas: centro, embaixo
 	var bar := _node(HBoxContainer, "WeaponHotbar", safe, "res://scripts/ui/weapon_hotbar.gd") as HBoxContainer
 	bar.unique_name_in_owner = true
@@ -353,6 +357,7 @@ func _build_sandbox() -> Node:
 	_build_choppable_trees(root)
 	_build_loot(root)
 	_build_zombies(root)
+	_build_vehicles(root)
 
 	var player := (load(PLAYER_SCENE) as PackedScene).instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
 	root.add_child(player)
@@ -651,6 +656,32 @@ func _pickup(parent: Node, id: String, pos: Vector3, qty := 1) -> void:
 	p.position = pos + Vector3.UP * 0.06  # nasce um pouco acima e assenta com a física
 	p.set("item_id", StringName(id))
 	p.set("quantity", qty)
+
+
+## Carro abandonado na estrada (faixa da direita), perto do início.
+func _build_vehicles(root: Node) -> void:
+	var car := _node(RigidBody3D, "Car", root, "res://scripts/vehicles/vehicle.gd") as RigidBody3D
+	car.position = Vector3(-11.0, 0.75, 30.0)
+	car.rotation_degrees.y = 0.0
+	var model := (load("res://assets/models/vehicles/hatch.glb") as PackedScene).instantiate(
+		PackedScene.GEN_EDIT_STATE_INSTANCE) as Node3D
+	model.name = "Model"
+	car.add_child(model)
+	# colisão: chassi (abaixo da linha da cintura) + cabine; as rodas são raios (não colidem)
+	for part in [["Chassis", Vector3(1.72, 0.52, 4.0), Vector3(0, 0.6, 0)],
+			["Cabin", Vector3(1.5, 0.62, 2.2), Vector3(0, 1.17, 0.2)]]:
+		var shape := BoxShape3D.new()
+		shape.size = part[1]
+		var col := _node(CollisionShape3D, part[0], car) as CollisionShape3D
+		col.shape = shape
+		col.position = part[2]
+	# área ao lado da porta do motorista: "Entrar"
+	var door := _node(Area3D, "DriverDoor", car, "res://scripts/vehicles/vehicle_door.gd") as Area3D
+	door.position = Vector3(-1.05, 0.9, 0.3)
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.7
+	var dcol := _node(CollisionShape3D, "Shape", door) as CollisionShape3D
+	dcol.shape = sphere
 
 
 func _build_zombies(root: Node) -> void:

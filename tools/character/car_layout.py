@@ -22,6 +22,12 @@ DOOR_OPEN_DEG = 68.0
 HANDLE_OUT = (-0.9, -0.48, 0.86)         # maçaneta externa (porta fechada)
 EXIT = (-1.2, -0.62, 0.0)                # onde o personagem fica em pé ao lado da porta
 
+TRUNK_HINGE = (-1.58, 1.57)              # (y, z) da dobradiça da tampa traseira (eixo X)
+TRUNK_Y = (-2.15, -1.59)
+TRUNK_Z = (0.9, 1.62)
+TRUNK_HALF_W = 0.72
+TRUNK_OPEN_DEG = 82.0
+
 # Quadros (30 fps) da animação de entrar: porta abre e fecha nestes intervalos.
 # A de sair é a mesma tocada de trás para frente.
 ENTER_FRAMES = 56

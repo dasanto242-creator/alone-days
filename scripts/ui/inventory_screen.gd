@@ -294,9 +294,15 @@ func _refresh_detail() -> void:
 	_detail_stats.text = stats
 
 	var equipped_selected := _selected_slot >= 0
-	_btn_primary.visible = has and (equipped_selected or d.is_usable() or d.is_equipment())
+	var is_wood := has and d.id == &"firewood" and not equipped_selected
+	_btn_primary.visible = has and (equipped_selected or d.is_usable() or d.is_equipment() or is_wood)
 	if _btn_primary.visible:
 		_btn_primary.text = "Desequipar" if equipped_selected else (d.use_verb if d.is_usable() else "Equipar")
+		if is_wood:
+			_btn_primary.text = "Fazer fogueira (3)"
+			_btn_primary.disabled = _player.inventory.count_of(&"firewood") < 3
+		else:
+			_btn_primary.disabled = false
 	_btn_drop_one.visible = has
 	_btn_drop_one.text = "Largar 1" if has and s.quantity > 1 else "Largar"
 	_btn_drop_all.visible = has and s.quantity > 1
@@ -323,7 +329,10 @@ func _on_primary() -> void:
 	if s == null:
 		return
 	var d := s.data()
-	if d.is_usable():
+	if d.id == &"firewood":
+		close()
+		_player.build_campfire()
+	elif d.is_usable():
 		_player.use_item(_selected_index)
 	elif d.is_equipment():
 		var slot := d.equip_slot

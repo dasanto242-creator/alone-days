@@ -31,13 +31,13 @@ const LOCO: Array[StringName] = [&"idle", &"walk", &"walk_aim", &"run", &"sprint
 const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
 	&"hold_melee", &"hold_pistol", &"hold_item", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left",
 	&"run_right", &"crouch_walk_back", &"crouch_walk_left", &"crouch_walk_right", &"walk_aim", &"walk_aim_back",
-	&"walk_aim_left", &"walk_aim_right", &"fall", &"drive", &"drive_left", &"drive_right"]
+	&"walk_aim_left", &"walk_aim_right", &"fall", &"aim_pistol", &"drive", &"drive_left", &"drive_right"]
 const LANDS: Array[StringName] = [&"land", &"land_hard"]
 const AIR: Array[StringName] = [&"jump", &"jump_run", &"fall"]
-const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol", &"hold_item"]
-const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol"]
+const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol", &"hold_item", &"aim_pistol"]
+const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol", &"fire_pistol_aim"]
 const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb", &"mantle_low", &"climb_high",
-	&"car_enter", &"car_exit"]
+	&"car_enter", &"car_exit", &"trunk_open", &"trunk_close", &"build_fire"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
 	"lowerarm", "wrist", "finger"]
 const ACTION_BONES := ["spine04", "spine03"]
@@ -228,8 +228,22 @@ func set_wielded(slot: int, inventory: Inventory) -> void:
 	elif slot == ItemData.Slot.MELEE:
 		_tree.set("parameters/hold_kind/transition_request", "hold_melee")
 	elif slot == ItemData.Slot.SIDEARM:
-		_tree.set("parameters/hold_kind/transition_request", "hold_pistol")
+		_tree.set("parameters/hold_kind/transition_request", "aim_pistol" if _aim else "hold_pistol")
 	_refresh_weapons(inventory)
+
+
+## Mirar: arma sobe para a linha dos olhos (pose de mira) ou volta para a posição de pronto.
+var _aim := false
+
+
+func set_aim(on: bool) -> void:
+	_aim = on
+	if _wielded == ItemData.Slot.SIDEARM:
+		_tree.set("parameters/hold_kind/transition_request", "aim_pistol" if on else "hold_pistol")
+
+
+func is_aiming() -> bool:
+	return _aim
 
 
 ## Golpe, disparo ou recarga (só tronco e braços; as pernas continuam).

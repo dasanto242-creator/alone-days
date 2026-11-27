@@ -226,6 +226,7 @@ func _build_hud() -> Node:
 	_button(safe, "InteractButton", "interact", "", 44.0, Vector2(-420, -120))
 	_button(safe, "AltInteractButton", "interact_alt", "Guardar", 36.0, Vector2(-420, -238))
 	# dirigindo: pedais à direita, freio de mão acima
+	_button(safe, "AimButton", "aim", "Mirar", 36.0, Vector2(-318, -182))
 	_button(safe, "GasButton", "car_gas", "Acelerar", 56.0, Vector2(-100, -110))
 	_button(safe, "BrakeButton", "car_brake", "Freio / Ré", 46.0, Vector2(-238, -82))
 	_button(safe, "HandbrakeButton", "jump", "Freio de mão", 38.0, Vector2(-150, -262))
@@ -296,6 +297,9 @@ func _build_hud() -> Node:
 	inv_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
 	inv_screen.unique_name_in_owner = true
 	inv_btn.set("inventory_screen_path", NodePath("../../../InventoryScreen"))
+	var cont := _node(Control, "ContainerScreen", hud, "res://scripts/ui/container_screen.gd") as Control
+	cont.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cont.unique_name_in_owner = true
 	var death := _node(Control, "DeathScreen", hud, "res://scripts/ui/death_screen.gd") as Control
 	death.set_anchors_preset(Control.PRESET_FULL_RECT)
 	return hud
@@ -340,6 +344,11 @@ func _build_sandbox() -> Node:
 	env.fog_light_color = Color(0.56, 0.59, 0.56)
 	env.fog_density = 0.007
 	env.fog_sky_affect = 0.5
+	# brilho leve em volta do que é muito claro (fogo, faróis)
+	env.glow_enabled = true
+	env.glow_intensity = 0.55
+	env.glow_hdr_threshold = 1.15
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	var world_env := _node(WorldEnvironment, "WorldEnvironment", root) as WorldEnvironment
 	world_env.environment = env
 
@@ -625,6 +634,9 @@ func _build_items() -> bool:
 			{"equip_slot": ItemData.Slot.MELEE, "weapon_kind": ItemData.WeaponKind.MELEE, "damage": 55.0,
 			"attack_range": 1.6, "attack_stamina": 20.0, "attack_cooldown": 1.0, "max_durability": 160.0,
 			"chop_power": 1.0, "world_rotation": Vector3(90, 10, 0)}),
+		_item("firewood", "Lenha", "Madeira de árvore cortada. Três lenhas fazem uma fogueira; uma mantém o fogo aceso.",
+			C.MISC, 1.0, 10, W.BOX, Vector3(0.42, 0.13, 0.13), Color(0.5, 0.35, 0.2),
+			{"world_rotation": Vector3(0, 30, 0)}),
 		_item("pistol", "Pistola 9 mm", "Semiautomática, carregador de 15 tiros. O barulho atrai atenção.",
 			C.WEAPON, 0.9, 1, W.BOX, Vector3(0.03, 0.14, 0.2), Color(0.1, 0.1, 0.1),
 			{"equip_slot": ItemData.Slot.SIDEARM, "weapon_kind": ItemData.WeaponKind.PISTOL, "damage": 40.0,
@@ -675,6 +687,13 @@ func _build_vehicles(root: Node) -> void:
 		var col := _node(CollisionShape3D, part[0], car) as CollisionShape3D
 		col.shape = shape
 		col.position = part[2]
+	# área atrás do carro: porta-malas
+	var trunk := _node(Area3D, "TrunkArea", car, "res://scripts/vehicles/vehicle_trunk.gd") as Area3D
+	trunk.position = Vector3(0, 0.9, 2.45)
+	var tsphere := SphereShape3D.new()
+	tsphere.radius = 0.75
+	var tcol := _node(CollisionShape3D, "Shape", trunk) as CollisionShape3D
+	tcol.shape = tsphere
 	# área ao lado da porta do motorista: "Entrar"
 	var door := _node(Area3D, "DriverDoor", car, "res://scripts/vehicles/vehicle_door.gd") as Area3D
 	door.position = Vector3(-1.05, 0.9, 0.3)

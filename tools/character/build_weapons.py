@@ -225,6 +225,72 @@ def axe():
     return ob
 
 
+def _log(b, center, length, radius, rot, bark, grain, seed, segments=9):
+    """Tora irregular (casca + topos com veio), deitada ao longo de `rot` @ Z."""
+    import random
+    rnd = random.Random(seed)
+    prof = []
+    n = 6
+    for i in range(n + 1):
+        z = -length / 2 + length * i / n
+        prof.append((radius * (0.9 + 0.12 * rnd.random()), z))
+    verts = b.lathe(prof, bark, segments, rot, Vector(center))
+    # topos com a madeira clara (material próprio)
+    for f in {f for v in verts for f in v.link_faces}:
+        if len(f.verts) == segments:
+            f.material_index = b._mat_index(grain)
+    return verts
+
+
+def firewood():
+    """Lenha: tora rachada ao meio, com casca escura e madeira clara aparecendo."""
+    bark = material("Casca", (0.24, 0.17, 0.11), 0.95)
+    grain = material("MadeiraClara", (0.72, 0.56, 0.36), 0.85)
+    b = Builder("Firewood")
+    _log(b, (0, 0, 0.0), 0.42, 0.065, Matrix.Rotation(math.pi / 2, 3, "Y"), bark, grain, 3)
+    # rachadura: uma lasca clara por cima (face cortada da tora)
+    b.box((0, 0, 0.058), (0.39, 0.075, 0.012), grain, 0.003)
+    ob = b.build()
+    ob.data.transform(Matrix.Translation((0, 0, 0.065)))
+    return ob
+
+
+def campfire():
+    """Fogueira: anel de pedras, cama de carvão/brasa e toras em pirâmide (origem no chão, no centro)."""
+    import random
+    rnd = random.Random(7)
+    stone = material("Pedra", (0.38, 0.37, 0.35), 0.9)
+    stone2 = material("PedraEscura", (0.26, 0.25, 0.24), 0.95)
+    soot = material("Fuligem", (0.05, 0.045, 0.04), 1.0)
+    coal = material("Brasa", (0.08, 0.04, 0.02), 0.9)
+    bark = material("CascaQueimada", (0.12, 0.08, 0.05), 0.95)
+    grain = material("MadeiraQueimada", (0.35, 0.22, 0.12), 0.9)
+    b = Builder("Campfire")
+    # cinza/fuligem no chão
+    b.lathe([(0.0, 0.004), (0.42, 0.006), (0.44, 0.0)], soot, 18)
+    # carvão em brasa no meio (montinho)
+    b.lathe([(0.0, 0.07), (0.12, 0.06), (0.24, 0.025), (0.27, 0.0)], coal, 14)
+    # anel de pedras arredondadas e irregulares
+    n = 11
+    for i in range(n):
+        a = 2 * math.pi * i / n + rnd.uniform(-0.1, 0.1)
+        r = 0.5 + rnd.uniform(-0.03, 0.03)
+        w, d, h = rnd.uniform(0.07, 0.1), rnd.uniform(0.055, 0.08), rnd.uniform(0.07, 0.11)
+        scale = Matrix.Diagonal((w, d, 1.0))
+        rot = Matrix.Rotation(a + rnd.uniform(-0.5, 0.5), 3, "Z") @ Matrix.Rotation(rnd.uniform(-0.25, 0.25), 3, "X")
+        prof = [(0.0, -0.01), (0.85, 0.0), (1.0, h * 0.35), (0.8, h * 0.8), (0.35, h), (0.0, h * 1.02)]
+        b.lathe(prof, stone if i % 3 else stone2, 7, rot @ scale, Vector((r * math.cos(a), r * math.sin(a), 0.0)))
+    # toras em pirâmide (tipi): pé no chão por fora, ponta queimada encostando no centro
+    for i in range(5):
+        a = 2 * math.pi * i / 5 + 0.3
+        base = Vector((0.32 * math.cos(a), 0.32 * math.sin(a), 0.03))
+        top = Vector((0.03 * math.cos(a), 0.03 * math.sin(a), 0.38))
+        d = (top - base)
+        rot = Vector((0, 0, 1)).rotation_difference(d.normalized()).to_matrix()
+        _log(b, (base + top) / 2, d.length + 0.06, 0.042, rot, bark, grain, 11 + i, 8)
+    return b.build()
+
+
 def ammo_box():
     card = material("Papelao", (0.42, 0.3, 0.16), 0.85)
     print_m = material("Faixa", (0.6, 0.55, 0.35), 0.8)
@@ -291,10 +357,12 @@ def main():
         ("pistol", pistol, (1.0, 0.0, 0.05)),
         ("ammo_9mm", ammo_box, (0.6, -0.8, 0.6)),
         ("axe", axe, (1.0, -0.2, 0.15)),
+        ("firewood", firewood, (0.8, -0.6, 0.6)),
+        ("campfire", campfire, (0.8, -0.8, 0.9)),
     ]
     only = os.environ.get("ONLY")
     for name, fn, view in items:
-        if only and name != only:
+        if only and name not in only.split(","):
             continue
         reset()
         ob = fn()

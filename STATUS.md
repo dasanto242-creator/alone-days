@@ -32,7 +32,7 @@
 | 2.7 | Tela de inventário por toque com ações contextuais (Comer, Beber, Usar, Equipar, Largar) | ✅ Concluído (testado) |
 | 2.8 | HUD discreta (vida, fome, sede, stamina), avisos na tela, tela de morte | ✅ Concluído |
 
-**Testes automáticos:** `tools/smoke_test.tscn` — 89 verificações, 89 aprovadas (rodam também no GitHub a cada build).
+**Testes automáticos:** `tools/smoke_test.tscn` — 180 verificações, 180 aprovadas (rodam também no GitHub a cada build).
 
 ## Com problemas / limitações conhecidas
 - Rosto ainda sem textura fotográfica (pele procedural); cabelo raspado pintado sob o gorro.
@@ -137,6 +137,26 @@
     acompanham o giro. Sair: só parado (abre, sai e fecha). Câmera segue atrás do carro.
   - Controles: Acelerar, Freio/Ré e Freio de mão; o joystick vira o volante (e também
     acelera/freia). Teclado: setas/WASD, Espaço = freio de mão, E = entrar/sair.
+
+## Ajustes de 26/11 (2) — corrida, mira, porta-malas, lenha e fogueira
+- Corrida e sprint refeitas: pé sobe por trás numa curva suave (calcanhar perto do glúteo no
+  sprint), joelho vem à frente, pisa sob o corpo; braços dobrados ~90°, punhos semifechados,
+  balançam de trás para frente perto do tronco (cruzam só um pouco a linha do peito), cotovelo
+  abre e fecha com o balanço; ombros e tronco contra-giram com as pernas.
+- Mirar com a pistola (botão **Mirar** / tecla **Z**): arma nas duas mãos na linha dos olhos,
+  câmera aproxima por cima do ombro (zoom), sensibilidade menor, anda devagar, tiro bem mais
+  preciso e disparo próprio mirando. Sai sozinho ao correr, recarregar, guardar a arma ou
+  entrar no carro.
+- Porta-malas: atrás do carro aparece **Abrir porta-malas**; o personagem abre a tampa (anima a
+  tampa até 82°), e abre a tela Mochila ⇄ Porta-malas (30 kg): toque num item para passar de um
+  lado para o outro (ou 1 por vez). **Fechar** baixa a tampa.
+- Árvore derrubada solta 3 lenhas no chão. Com 3 lenhas, no inventário: **Fazer fogueira** — o
+  personagem se ajoelha, monta as toras em pirâmide dentro de um círculo de pedras e acende.
+- Fogo: chamas animadas (textura própria quadro a quadro, aditiva), núcleo brilhante, faíscas
+  com turbulência, fumaça que sobe e se espalha, brasas pulsando, luz laranja que tremula e
+  mexe as sombras, distorção de calor no ar (gráfico Médio/Alto), som de fogo crepitando.
+  Perto (3 m) recupera stamina e mostra "Calor da fogueira"; encostar no fogo queima
+  (jogador e zumbis). Lenha dura ~2,5 min cada (máx. 10 min): **Adicionar lenha** / **Apagar**.
 
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).

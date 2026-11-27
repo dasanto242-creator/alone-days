@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/icons/items/firewood.png" id="1_1u050"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/firewood.glb" id="2_nrgse"]
+[ext_resource type="Script" path="res://scripts/items/item_data.gd" id="3_vwnbj"]
+
+[resource]
+script = ExtResource("3_vwnbj")
+id = &"firewood"
+display_name = "Lenha"
+description = "Madeira de árvore cortada. Três lenhas fazem uma fogueira; uma mantém o fogo aceso."
+icon = ExtResource("1_1u050")
+weight = 1.0
+max_stack = 10
+model = ExtResource("2_nrgse")
+world_rotation = Vector3(0, 30, 0)
+world_size = Vector3(0.42, 0.13, 0.13)
+world_color = Color(0.5, 0.35, 0.2, 1)

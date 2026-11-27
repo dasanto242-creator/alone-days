@@ -349,6 +349,34 @@ def car():
     save("car_crash", impact + metal + rattle, 0.95)
 
 
+def fire():
+    """Fogueira: ronco grave do fogo + estalos de madeira (loop) e o "fuuf" de acender."""
+    d = 6.0
+    n = int(d * SR)
+    t = t_axis(d)
+    roar = lp(brown(d), 300) * (0.7 + 0.3 * lp(rng.normal(0, 1, n), 2) * 3)
+    hiss = bp(noise(d), 1500, 6000) * 0.12 * (0.6 + 0.4 * np.sin(2 * np.pi * 0.37 * t))
+    pops = np.zeros(n)
+    k = 0.05
+    while k < d - 0.1:
+        dur = rng.uniform(0.004, 0.03)
+        c = bp(noise(dur + 0.02), rng.uniform(900, 2500), 7000) * env(int((dur + 0.02) * SR), 0.0003, dur)
+        i = int(k * SR)
+        pops[i:i + len(c)] += c[: n - i] * rng.uniform(0.3, 1.0)
+        k += rng.exponential(0.12)
+    x = roar * 0.9 + hiss + pops * 1.3
+    xf = int(0.3 * SR)
+    x[:xf] = x[:xf] * np.linspace(0, 1, xf) + x[-xf:] * np.linspace(1, 0, xf)
+    _save_raw("fire_loop", x[: n - xf], 0.6)
+    d = 1.2
+    whoosh = lp(noise(d), 900) * env(int(d * SR), 0.15, 0.8) + lp(brown(d), 200) * env(int(d * SR), 0.2, 0.7)
+    save("fire_ignite", whoosh, 0.7)
+    # tora caindo no fogo: baque surdo + faíscas
+    thud = lp(brown(0.5), 220) * env(int(0.5 * SR), 0.002, 0.1) * 2 + \
+        bp(noise(0.5), 2000, 7000) * env(int(0.5 * SR), 0.02, 0.2) * (rng.uniform(0, 1, int(0.5 * SR)) > 0.8) * 0.5
+    save("fire_log", thud, 0.7)
+
+
 def _save_raw(name, x, peak):
     """Salva sem fade (loops precisam emendar sem cortar o volume)."""
     x = norm(np.asarray(x, dtype=float), peak)
@@ -373,3 +401,4 @@ if __name__ == "__main__":
     consumables()
     world()
     car()
+    fire()

@@ -42,3 +42,9 @@ signal weapons_changed
 
 ## Jogador entrou (vehicle) ou saiu (null) de um carro: a HUD troca os controles.
 signal vehicle_changed(vehicle: Node)
+
+## Mirando com a arma (mostra/destaca o botão Mirar e aperta a mira na tela).
+signal aim_changed(aiming: bool)
+
+## Abrir a tela de troca de itens com um recipiente (ex.: porta-malas).
+signal container_requested(inventory: Inventory, title: String)

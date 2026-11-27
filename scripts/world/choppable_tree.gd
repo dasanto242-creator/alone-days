@@ -10,6 +10,8 @@ signal felled
 
 @export var hits_to_fell := 5
 @export var regrow_time := 300.0
+## Quantas lenhas a árvore solta ao cair.
+@export var wood_drop := 3
 
 var hits := 0
 var is_felled := false
@@ -188,7 +190,8 @@ func _fell(from: Vector3) -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_tween.tween_callback(func() -> void:
 		Sfx.play_3d(&"tree_fall", global_position + away * 3.0)
-		Events.noise_emitted.emit(global_position, 25.0, self))
+		Events.noise_emitted.emit(global_position, 25.0, self)
+		_drop_wood(away))
 	_tween.tween_property(_pivot, "basis", Basis(axis, deg_to_rad(80.0)), 0.15).set_ease(Tween.EASE_OUT)
 	_tween.tween_property(_pivot, "basis", Basis(axis, deg_to_rad(84.0)), 0.25).set_ease(Tween.EASE_IN)
 	_tween.tween_interval(4.0)
@@ -204,6 +207,15 @@ func _fell(from: Vector3) -> void:
 		col.set_deferred("shape", stump_shape)
 		col.set_deferred("position", Vector3(0, 0.175, 0))
 	get_tree().create_timer(regrow_time).timeout.connect(_regrow)
+
+
+## Lenha que sobra da árvore caída: algumas toras ao longo do tronco.
+func _drop_wood(away: Vector3) -> void:
+	var side := Vector3.UP.cross(away).normalized()
+	for i in wood_drop:
+		var p := global_position + away * (1.4 + i * 1.1) + side * randf_range(-0.35, 0.35) + Vector3.UP * 0.35
+		var pickup := ItemPickup.spawn(get_parent(), &"firewood", 1, 100.0, p)
+		pickup.rotation.y = randf() * TAU
 
 
 func _regrow() -> void:

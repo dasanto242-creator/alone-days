@@ -30,6 +30,7 @@ var _target_label: Label
 @onready var _reload_button: ActionButton = %ReloadButton
 @onready var _alt_button: ActionButton = %AltInteractButton
 @onready var _jump_button: ActionButton = %JumpButton
+@onready var _aim_button: ActionButton = %AimButton
 @onready var _gas_button: ActionButton = %GasButton
 @onready var _brake_button: ActionButton = %BrakeButton
 @onready var _handbrake_button: ActionButton = %HandbrakeButton
@@ -62,6 +63,7 @@ func _ready() -> void:
 	_on_weapon_state_changed(ItemData.WeaponKind.NONE, "", false)
 	Events.player_movement_state_changed.connect(_on_player_movement_state_changed)
 	Events.vehicle_changed.connect(_on_vehicle_changed)
+	Events.aim_changed.connect(func(on: bool) -> void: _aim_button.highlighted = on)
 	for b in [_gas_button, _brake_button, _handbrake_button]:
 		b.visible = false
 	get_viewport().size_changed.connect(_apply_safe_area)
@@ -181,6 +183,7 @@ func _on_weapon_state_changed(kind: int, _ammo: String, _has_weapons: bool) -> v
 	_set_button_visible(_attack_button, kind != ItemData.WeaponKind.NONE)
 	_attack_button.label = "Atirar" if kind == ItemData.WeaponKind.PISTOL else "Atacar"
 	_set_button_visible(_reload_button, kind == ItemData.WeaponKind.PISTOL)
+	_set_button_visible(_aim_button, kind == ItemData.WeaponKind.PISTOL)
 
 
 func _set_button_visible(button: ActionButton, value: bool) -> void:
@@ -207,6 +210,7 @@ func _on_vehicle_changed(vehicle: Node) -> void:
 	if _driving:
 		_set_button_visible(_attack_button, false)
 		_set_button_visible(_reload_button, false)
+		_set_button_visible(_aim_button, false)
 	else:
 		_on_weapon_state_changed(_weapon_kind, "", false)
 

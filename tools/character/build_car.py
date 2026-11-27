@@ -233,7 +233,21 @@ def build_body():
     boolean(body, cut2, "DIFFERENCE")
     for c in (cut, cut2):
         bpy.data.objects.remove(c)
-    return body, door
+    # tampa traseira (porta-malas): também vira peça separada, girando na dobradiça do teto
+    y0, y1 = L.TRUNK_Y
+    tz0, tz1 = L.TRUNK_Z
+    tcut = box("TrunkCut", (0, (y0 + y1) / 2, (tz0 + tz1) / 2), (L.TRUNK_HALF_W * 2, y1 - y0, tz1 - tz0))
+    trunk = body.copy()
+    trunk.data = body.data.copy()
+    link(trunk)
+    trunk.name = "Trunk"
+    boolean(trunk, tcut, "INTERSECT")
+    tcut2 = box("TrunkCut2", (0, (y0 + y1) / 2 - 0.003, (tz0 + tz1) / 2),
+                (L.TRUNK_HALF_W * 2 + 0.012, y1 - y0 + 0.006, tz1 - tz0 + 0.012))
+    boolean(body, tcut2, "DIFFERENCE")
+    for c in (tcut, tcut2):
+        bpy.data.objects.remove(c)
+    return body, door, trunk
 
 
 def assign_body_materials(ob, paint, glass, trim):
@@ -375,12 +389,12 @@ def main():
         "taillight": material("Taillight", (0.5, 0.04, 0.03), 0.2, emission=(0.25, 0.0, 0.0)),
         "plate": material("Plate", (0.85, 0.85, 0.82), 0.5),
     })
-    body, door = build_body()
+    body, door, trunk = build_body()
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
     scene.cycles.samples = 4
-    for ob, size, tag in ((body, 1024, "car_paint"), (door, 512, "car_door")):
+    for ob, size, tag in ((body, 1024, "car_paint"), (door, 512, "car_door"), (trunk, 512, "car_trunk")):
         body_paint, nt = paint_material()
         assign_body_materials(ob, body_paint, MAT["glass"], MAT["trim"])
         # separa a lataria (material 0) para assar a pintura com sujeira e ferrugem numa textura
@@ -401,8 +415,14 @@ def main():
         joined = join([ob, painted], ob.name)
         if ob is body:
             body = joined
-        else:
+        elif ob is door:
             door = joined
+        else:
+            trunk = joined
+    set_origin(trunk, (0.0, L.TRUNK_HINGE[0], L.TRUNK_HINGE[1]))
+    # assoalho do porta-malas (bagageiro) e tampão escuro
+    cargo = box("CargoFloor", (0, -1.58, 0.36), (1.36, 0.36, 0.04))
+    cargo.data.materials.append(MAT["seat"])
     hx, hy = L.DOOR_HINGE
     set_origin(door, (hx, hy, 0.0))
     details, handle, mirror = build_details(door)
@@ -429,7 +449,7 @@ def main():
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_yup=True, export_apply=True)
     print("Exportado:", OUT)
-    del body_all, door_parts, interior, sw, wheels
+    del body_all, door_parts, interior, sw, wheels, cargo
 
 
 if __name__ == "__main__":

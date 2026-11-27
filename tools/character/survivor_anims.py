@@ -301,8 +301,44 @@ class Gait:
         self.arm_mode, self.arm_amp, self.heel, self.toe_off, self.knee_kick = arm_mode, arm_amp, heel, toe_off, knee_kick
 
 
+def _catmull(pts, t):
+    """Curva suave (Catmull-Rom) que passa por todos os pontos (t, valores...) com t crescente."""
+    for i in range(len(pts) - 1):
+        t0, t1 = pts[i][0], pts[i + 1][0]
+        if t <= t1 or i == len(pts) - 2:
+            u = min(max((t - t0) / (t1 - t0), 0.0), 1.0)
+            p0 = pts[max(i - 1, 0)][1:]
+            p1 = pts[i][1:]
+            p2 = pts[i + 1][1:]
+            p3 = pts[min(i + 2, len(pts) - 1)][1:]
+            out = []
+            for a, b, c, d in zip(p0, p1, p2, p3):
+                out.append(0.5 * ((2 * b) + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u
+                                  + (-a + 3 * b - 3 * c + d) * u ** 3))
+            return out
+    return list(pts[-1][1:])
+
+
+def run_swing(g, t):
+    """Balanço da perna na corrida, como um corredor de verdade: logo depois de tirar o pé do chão o
+    calcanhar sobe em direção ao glúteo (o pé ainda atrás), o joelho é puxado para a frente e para
+    cima, a perna se estende e o pé desce para pisar logo à frente do quadril (sem passada esticada).
+    Retorna (frente, altura, inclinação)."""
+    rf, rb, h = g.reach_f, g.reach_b, g.lift
+    fwd, lift, pitch = _catmull([
+        (0.0, -rb, 0.02, -g.toe_off),
+        (0.28, -0.5 * rb, h, -45.0),
+        (0.55, 0.55 * rf, 0.72 * h, -25.0),
+        (0.8, 1.15 * rf, 0.22 * h, -2.0),
+        (1.0, rf, 0.0, g.heel),
+    ], t)
+    return fwd, max(lift, 0.0), pitch
+
+
 def foot_track(g, ph):
     """(frente, altura, inclinação) do pé numa fase 0..1 do seu próprio ciclo (0 = toca o chão)."""
+    if ph >= g.duty and g.arm_mode == "run" and g.dir_y > 0.5:
+        return run_swing(g, (ph - g.duty) / (1 - g.duty))
     if ph < g.duty:  # apoio: pé parado no chão (desliza para trás em relação ao quadril)
         t = ph / g.duty
         fwd = g.reach_f - g.stride * t
@@ -367,7 +403,7 @@ def locomotion(rig, name, g):
     finish(rig, act)
 
 
-def arm_pendulum(rig, side, swing_deg, elbow_deg, out=0.06, inward=0.0, fist=0.2, palm_in=True):
+def arm_pendulum(rig, side, swing_deg, elbow_deg, out=0.06, inward=0.0, fist=0.2, palm_in=True, pole_out=0.3):
     """Braço pendurado como pêndulo: ângulo do braço (frente +) e dobra do cotovelo, em graus.
     Calcula onde a mão fica e deixa a IK resolver; a palma fica virada para a coxa."""
     a = rig.arm_rest[side]
@@ -383,7 +419,7 @@ def arm_pendulum(rig, side, swing_deg, elbow_deg, out=0.06, inward=0.0, fist=0.2
     fore = (dir_at(swing_deg + elbow_deg) + lateral * (out * 0.5 - inward)).normalized()
     grip = elbow + fore * (a["l2"] + 0.07)
     thumb = rig.chest_vec(Vector((-sx * 0.25, -1.0, 0.0))) if palm_in else None
-    pole = rig.chest_vec(Vector((sx * 0.3, 1.0, 0.0)))
+    pole = rig.chest_vec(Vector((sx * pole_out, 1.0, 0.0)))
     if thumb is not None:
         rig.hand(side, grip, fwd=fore, thumb=thumb, pole=pole, fist=fist)
     else:
@@ -403,17 +439,16 @@ def arm_cycle(rig, side, g, p, sign, imp):
         # braços à frente e afastados para equilíbrio, balanço curto
         arm_pendulum(rig, side, 28 + 9 * swing, 48 + 8 * max(swing, 0.0), out=0.16, inward=0.05, fist=0.35)
     else:
-        # corrida: cotovelo ~90° colado ao corpo; mão vai do quadril (atrás) até a altura do peito (frente)
-        sx = 1.0 if side == "L" else -1.0
-        sh = rig.shoulder_pos(side)
-        t = 0.5 + 0.5 * swing
+        # corrida: o braço balança a partir do ombro com o cotovelo dobrado em ~90° (abre um pouco
+        # atrás, fecha na frente); a mão vai do lado do quadril até a altura do peito, sem cruzar o
+        # meio do corpo; mãos relaxadas, semifechadas
         amp = g.arm_amp
-        back = Vector((sx * 0.02, 0.16 * amp, -0.42))
-        front = Vector((-sx * 0.08, -0.26 * amp, -0.2 - 0.06 * (amp - 1)))
-        local = back.lerp(front, smooth(t))
-        local.z -= 0.02 * imp * g.impact
-        pole = rig.chest_vec(Vector((sx * 0.25, 1.0, -0.4)))
-        rig.hand(side, sh + rig.chest_vec(local), pole=pole, fist=0.75)
+        front = max(swing, 0.0)
+        back = max(-swing, 0.0)
+        upper = amp * (-10 + 35 * swing)                 # graus: atrás -45, frente +25 (corrida)
+        elbow = 94 + 14 * front - 2 * back               # cotovelo ~90° atrás, mais fechado na frente
+        arm_pendulum(rig, side, upper, elbow, out=0.015, inward=0.12 * front + 0.03,
+                     fist=0.55, palm_in=True, pole_out=0.08)
 
 
 def idle(rig):
@@ -552,11 +587,14 @@ def attack_melee(rig):
     finish(rig, act, cyclic=False)
 
 
-def pistol_pose(rig, kick=0.0, lower=0.0, left_to_hip=0.0):
-    stand_base(rig, lean=6, width=0.15, stagger=0.1)
-    rig.head(pitch=-4)
+def pistol_pose(rig, kick=0.0, lower=0.0, left_to_hip=0.0, aim=0.0):
+    """aim = 1: arma na altura dos olhos, cabeça baixa encostando a bochecha (mirando pela alça)."""
+    stand_base(rig, lean=6 + 2 * aim, width=0.15, stagger=0.1)
+    rig.head(pitch=-4 + 10 * aim, roll=-6 * aim, yaw=-4 * aim)
+    rig.shoulders(raise_l=4 * aim, raise_r=6 * aim, fwd_l=6 * aim, fwd_r=4 * aim)
     chest_c = (rig.shoulder_pos("L") + rig.shoulder_pos("R")) * 0.5
-    grip = chest_c + Vector((-0.03, -0.5 + kick * 0.04, -0.06 + kick * 0.05 - lower * 0.25))
+    grip = chest_c + Vector((-0.03 + 0.005 * aim, -0.5 + kick * 0.04 + 0.04 * aim,
+                             -0.06 + kick * 0.05 - lower * 0.25 + 0.2 * aim))
     fwd = (FWD + Vector((0, 0, kick * 0.35 - lower * 0.5))).normalized()
     rig.hand("R", grip, fwd=fwd, thumb=Z.copy(), fist=0.95)
     # mão de apoio envolve a direita (ou vai até a cintura buscar o carregador)
@@ -574,6 +612,26 @@ def hold_pistol(rig):
         pistol_pose(rig, lower=0.03 * math.sin(2 * math.pi * f / frames))
         rig.key(f)
     finish(rig, act)
+
+
+def aim_pistol(rig):
+    """Mirando: pistola na linha dos olhos, braços quase esticados, respiração mexe pouco a mira."""
+    frames = 60
+    act = new_action(rig, "aim_pistol", frames)
+    for f in range(0, frames + 1, 6):
+        rig.begin()
+        pistol_pose(rig, lower=0.012 * math.sin(2 * math.pi * f / frames), aim=1.0)
+        rig.key(f)
+    finish(rig, act)
+
+
+def fire_pistol_aim(rig):
+    act = new_action(rig, "fire_pistol_aim", 8)
+    for f, kick in ((0, 0.0), (1, 0.8), (3, 0.45), (8, 0.0)):
+        rig.begin()
+        pistol_pose(rig, kick=kick, aim=1.0)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
 
 
 def fire_pistol(rig):
@@ -816,6 +874,60 @@ def hold_item(rig):
         hand_item_pose(rig, 0.05 + 0.01 * b, 0.0)
         rig.key(f)
     finish(rig, act)
+
+
+# ---------------------------------------------------------------- porta-malas e fogueira
+
+def _lid_anim(rig, name, keys):
+    """Mãos no porta-malas: keys = (quadro, altura das mãos (m, do chão), frente, inclinação)."""
+    frames = keys[-1][0]
+    act = new_action(rig, name, frames)
+    for f, h, fwd, lean in keys:
+        rig.begin()
+        stand_base(rig, lean=lean, width=0.15, stagger=0.06)
+        rig.head(pitch=-10 if h > 1.4 else 12)
+        for side in ("L", "R"):
+            sx = 1.0 if side == "L" else -1.0
+            rig.hand(side, Vector((sx * 0.22, -fwd, h)), fist=0.6)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
+def trunk_open(rig):
+    """Abre a tampa traseira: pega embaixo da tampa, destrava e empurra para cima."""
+    _lid_anim(rig, "trunk_open", [(0, 0.75, 0.15, 3), (8, 0.95, 0.42, 14), (14, 1.0, 0.45, 12),
+                                  (22, 1.55, 0.38, 2), (28, 1.85, 0.3, -4), (36, 0.8, 0.1, 3)])
+
+
+def trunk_close(rig):
+    """Fecha: alcança a borda da tampa no alto e puxa para baixo com força."""
+    _lid_anim(rig, "trunk_close", [(0, 0.8, 0.1, 3), (8, 1.85, 0.3, -4), (14, 1.7, 0.35, 0),
+                                   (22, 1.05, 0.45, 16), (26, 0.95, 0.42, 14), (34, 0.75, 0.12, 3)])
+
+
+def build_fire(rig):
+    """Ajoelhado, monta a fogueira: arruma as pedras e encosta as toras, uma mão de cada vez."""
+    frames = 72
+    act = new_action(rig, "build_fire", frames)
+    keys = [0, 10, 20, 30, 40, 50, 60, 72]
+    for i, f in enumerate(keys):
+        k = 0.0 if f in (0, 72) else 1.0
+        rig.begin()
+        rig.pelvis(Vector((0, 0.08 * k, -0.48 * k - 0.03)), pitch=12 * k)
+        rig.torso(lean=4 + 34 * k)
+        rig.head(pitch=30 * k)
+        rig.foot("L", Vector((0.15, -0.28 * k, rig.ground_ankle)), yaw=8)
+        # joelho direito no chão: pé para trás, apoiado na ponta
+        rig.foot("R", Vector((-0.14, 0.3 * k, rig.ground_ankle + 0.06 * k)), pitch=-55 * k, yaw=-8)
+        a = i % 2
+        reach_r = Vector((-0.1 - 0.08 * a, -0.55, 0.12 + 0.1 * (1 - a)))
+        reach_l = Vector((0.12 + 0.06 * (1 - a), -0.5, 0.12 + 0.1 * a))
+        rest_r = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.06, -0.05, -0.56)))
+        rest_l = rig.shoulder_pos("L") + rig.chest_vec(Vector((0.06, -0.05, -0.56)))
+        rig.hand("R", rest_r.lerp(reach_r, k), fist=0.4)
+        rig.hand("L", rest_l.lerp(reach_l, k * (0.7 + 0.3 * a)), fist=0.4)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
 
 
 # ---------------------------------------------------------------- pulos, quedas e aterrissagens
@@ -1158,10 +1270,12 @@ def create_all(arm):
     #                      ciclo passada apoio elev. larg. queda bob  fase  incl. q.yaw q.roll sway impacto braço amp
     locomotion(rig, "walk", Gait(1.05, (0.4, 0.45), 0.62, 0.1, 0.09, 0.035, 0.018, math.pi, 4, 5, 3, 0.02, 0.3,
                                  "walk", 20, heel=14, toe_off=20))
-    locomotion(rig, "run", Gait(0.7, (0.3, 0.6), 0.36, 0.32, 0.06, 0.07, 0.035, 0.0, 10, 8, 4, 0.012, 1.0,
-                                "run", 1.0, heel=6, toe_off=30, knee_kick=0.1))
-    locomotion(rig, "sprint", Gait(0.6, (0.32, 0.72), 0.3, 0.45, 0.05, 0.095, 0.045, 0.0, 16, 10, 4, 0.008, 1.2,
-                                   "run", 1.35, heel=2, toe_off=35, knee_kick=0.15))
+    # corrida: cadência ~170 passos/min, pé pisa pouco à frente do quadril, voo curto entre os passos,
+    # tronco levemente inclinado, ombros girando contra o quadril
+    locomotion(rig, "run", Gait(0.7, (0.3, 0.6), 0.36, 0.4, 0.06, 0.07, 0.035, 0.0, 9, 7, 3, 0.01, 0.9,
+                                "run", 1.0, heel=4, toe_off=28))
+    locomotion(rig, "sprint", Gait(0.62, (0.34, 0.74), 0.3, 0.52, 0.05, 0.09, 0.045, 0.0, 15, 9, 3, 0.008, 1.1,
+                                   "run", 1.3, heel=0, toe_off=35))
     # direcionais (usados com arma em mãos, corpo virado para a câmera)
     #                         ciclo  passada      apoio elev. larg. queda bob  fase  incl. q.yaw q.roll sway imp.
     for name, d in (("left", (-1.0, 0.0)), ("right", (1.0, 0.0))):
@@ -1201,6 +1315,8 @@ def create_all(arm):
     hold_pistol(rig)
     fire_pistol(rig)
     reload_pistol(rig)
+    aim_pistol(rig)
+    fire_pistol_aim(rig)
     drink(rig)
     eat(rig)
     pickup(rig)
@@ -1209,6 +1325,9 @@ def create_all(arm):
     mantle_low(rig)
     climb_high(rig)
     hold_item(rig)
+    trunk_open(rig)
+    trunk_close(rig)
+    build_fire(rig)
     car_enter(rig)
     drive_pose(rig, "drive", 0.0)
     drive_pose(rig, "drive_left", -90.0)

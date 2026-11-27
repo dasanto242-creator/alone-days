@@ -14,7 +14,8 @@
 [ext_resource type="Resource" path="res://data/items/axe.tres" id="11_lvo0k"]
 [ext_resource type="Resource" path="res://data/items/pistol.tres" id="11_va3tm"]
 [ext_resource type="Resource" path="res://data/items/ammo_9mm.tres" id="12_f0gi7"]
+[ext_resource type="Resource" path="res://data/items/firewood.tres" id="12_va3tm"]
 
 [resource]
 script = ExtResource("9_i8i6x")
-items = Array[ExtResource("1_bkwa7")]([ExtResource("2_r17ad"), ExtResource("3_6tph3"), ExtResource("4_pmq3d"), ExtResource("5_ttyvi"), ExtResource("6_lvo0k"), ExtResource("7_va3tm"), ExtResource("8_f0gi7"), ExtResource("9_ttyvi"), ExtResource("10_lvo0k"), ExtResource("11_lvo0k"), ExtResource("11_va3tm"), ExtResource("12_f0gi7")])
+items = Array[ExtResource("1_bkwa7")]([ExtResource("2_r17ad"), ExtResource("3_6tph3"), ExtResource("4_pmq3d"), ExtResource("5_ttyvi"), ExtResource("6_lvo0k"), ExtResource("7_va3tm"), ExtResource("8_f0gi7"), ExtResource("9_ttyvi"), ExtResource("10_lvo0k"), ExtResource("11_lvo0k"), ExtResource("12_va3tm"), ExtResource("11_va3tm"), ExtResource("12_f0gi7")])

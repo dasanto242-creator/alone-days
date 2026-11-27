@@ -45,6 +45,15 @@ const DOOR_OPEN_DEG := 68.0
 @export var steer_return := 3.2          ## rad/s ao soltar
 @export var steering_wheel_turns := 2.6  ## rad no volante por unidade de esterço
 
+## Porta-malas: guarda itens (capacidade em kg). A tampa abre e fecha com animação.
+@export var trunk_capacity := 30.0
+var trunk: Inventory
+var trunk_open := false
+var _trunk_node: Node3D
+var _trunk_base: Basis
+var _trunk_angle := 0.0
+const TRUNK_OPEN_DEG := 82.0
+
 var driver: Node = null
 var throttle := 0.0
 var brake := 0.0
@@ -91,6 +100,10 @@ func _ready() -> void:
 		add_child(_model)
 	_door = _model.find_child("Door_FL", true, false) as Node3D
 	_door_base = _door.basis if _door else Basis()
+	_trunk_node = _model.find_child("Trunk", true, false) as Node3D
+	_trunk_base = _trunk_node.basis if _trunk_node else Basis()
+	trunk = Inventory.new()
+	trunk.base_capacity = trunk_capacity
 	_steering_wheel = _model.find_child("SteeringWheel", true, false) as Node3D
 	_sw_base = _steering_wheel.basis if _steering_wheel else Basis()
 	for n in ["FL", "FR", "RL", "RR"]:
@@ -164,8 +177,27 @@ func set_driver(d: Node) -> void:
 
 # ---------------------------------------------------------------- física
 
+## Abre/fecha a tampa traseira (o jogador toca a animação; a tampa acompanha com um atraso).
+func set_trunk_open(open: bool) -> void:
+	trunk_open = open
+	sleeping = false
+	get_tree().create_timer(0.35 if open else 0.25).timeout.connect(func() -> void:
+		Sfx.play_3d(&"car_door", global_transform * Vector3(0, 1.1, 2.0), -3.0))
+
+
+func _update_trunk(delta: float) -> void:
+	if _trunk_node == null:
+		return
+	# abre subindo (amortecedores a gás) e fecha caindo mais rápido no final
+	var target := TRUNK_OPEN_DEG if trunk_open else 0.0
+	var rate := 95.0 if trunk_open else 150.0
+	_trunk_angle = move_toward(_trunk_angle, target, rate * delta)
+	_trunk_node.basis = _trunk_base * Basis(Vector3.RIGHT, -deg_to_rad(_trunk_angle))
+
+
 func _physics_process(delta: float) -> void:
 	_update_door(delta)
+	_update_trunk(delta)
 	var fwd := -global_basis.z
 	var v_fwd := linear_velocity.dot(fwd)
 	speed_kmh = absf(v_fwd) * 3.6

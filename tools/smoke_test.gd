@@ -16,6 +16,7 @@ func _ready() -> void:
 	_player = world.get_node("Player")
 	_rig = world.get_node("CameraRig")
 	_hud = world.get_node("HUD")
+	Events.notify.connect(func(t: String) -> void: print("   [aviso] ", t))
 	await _frames(20)
 	# zumbis do cenário ficam fora dos testes gerais (são testados à parte, em _run_zombie)
 	var spawner := world.get_node("ZombieSpawner") as ZombieSpawner
@@ -373,6 +374,7 @@ func _run_stage2() -> void:
 	await _run_weapons()
 	await _run_parkour_axe()
 	await _run_vehicle()
+	await _run_trunk_fire_aim()
 	await _run_zombie()
 
 	# --- Morte
@@ -614,6 +616,11 @@ func _run_vehicle() -> void:
 	Input.action_press("jump")
 	await get_tree().create_timer(1.5).timeout
 	Input.action_release("jump")
+	# leva o carro (parado) para a estrada livre, para a porta ter espaço para abrir
+	car.linear_velocity = Vector3.ZERO
+	car.angular_velocity = Vector3.ZERO
+	car.global_transform = Transform3D(Basis(), Vector3(-11.0, 0.05, -20.0))
+	await get_tree().create_timer(0.6).timeout
 	await _tap_action("interact")
 	await get_tree().create_timer(2.3).timeout
 	_check("Sai do carro e fica em pé ao lado da porta", not _player.in_vehicle() and _player.is_on_floor()
@@ -625,6 +632,98 @@ func _run_vehicle() -> void:
 	car.angular_velocity = Vector3.ZERO
 	car.global_transform = Transform3D(Basis(), start_pos + Vector3.UP * 0.4)
 	await get_tree().create_timer(0.8).timeout
+
+
+# ================================================================ PORTA-MALAS, FOGUEIRA, MIRA
+
+func _run_trunk_fire_aim() -> void:
+	print("\n-- Porta-malas, lenha, fogueira e mira --")
+	var world := _player.get_parent()
+	var inv := _player.inventory
+	var stats := _player.stats
+	var car := world.get_node("Car") as Vehicle
+	var weapons := _player.get_node("Weapons") as WeaponHandler
+	if weapons.wielded_slot != -1:
+		weapons.set_wielded(-1)
+	await get_tree().create_timer(0.5).timeout
+	# --- porta-malas
+	_teleport(car.global_transform * Vector3(0, 0.05, 2.95), 0.0)
+	await _frames(8)
+	var interact_btn := _hud.get_node("%InteractButton") as ActionButton
+	_check("Atrás do carro: 'Abrir porta-malas' (%s)" % interact_btn.label, interact_btn.label == "Abrir porta-malas")
+	await _tap_action("interact")
+	await get_tree().create_timer(1.5).timeout
+	var lid := car.find_child("Trunk", true, false) as Node3D
+	_check("Tampa traseira abre (%.0f°)" % rad_to_deg(car.get("_trunk_angle")), car.trunk_open and float(car.get("_trunk_angle")) > 60.0)
+	var screen := _hud.get_node("%ContainerScreen") as ContainerScreen
+	_check("Abre a tela do porta-malas", screen.is_open())
+	inv.add_item(&"can_beans", 2)
+	var idx := inv.index_of(&"can_beans")
+	var moved := screen.move(idx, true)
+	_check("Guarda itens no porta-malas (%d)" % moved, moved >= 1 and car.trunk.count_of(&"can_beans") >= 1)
+	var back := screen.move(car.trunk.index_of(&"can_beans"), false, true)
+	_check("Pega de volta do porta-malas", back == 1)
+	screen.close()
+	await _frames(3)
+	await _tap_action("interact_alt")
+	await get_tree().create_timer(1.6).timeout
+	_check("Fecha o porta-malas", not car.trunk_open and float(car.get("_trunk_angle")) < 1.0 and lid != null)
+	# --- lenha da árvore derrubada no teste do machado
+	var wood_on_ground := 0
+	for node in world.find_children("*", "RigidBody3D", true, false):
+		if node is ItemPickup and (node as ItemPickup).item_id == &"firewood":
+			wood_on_ground += 1
+	_check("Árvore derrubada soltou lenha (%d)" % wood_on_ground, wood_on_ground >= 3)
+	# --- fogueira
+	_teleport(Vector3(4.0, 0.05, 24.0), 0.0)
+	(_player.get_node("Visual") as Node3D).rotation.y = 0.0
+	await _frames(8)
+	inv.add_item(&"firewood", 4)
+	_check("Fogueira precisa de chão livre e 3 lenhas", _player.build_campfire())
+	await get_tree().create_timer(2.8).timeout
+	var fires := get_tree().get_nodes_in_group("campfires")
+	_check("Fogueira montada e acesa", fires.size() == 1 and (fires[0] as Campfire).is_burning()
+		and inv.count_of(&"firewood") == 1)
+	var fire := fires[0] as Campfire
+	await get_tree().create_timer(1.5).timeout
+	var light := fire.get("_light") as OmniLight3D
+	_check("Fogo com chamas, faíscas, fumaça e luz tremulando (%.2f)" % light.light_energy,
+		(fire.get("_flames") as GPUParticles3D).emitting and (fire.get("_sparks") as GPUParticles3D).emitting
+		and (fire.get("_smoke") as GPUParticles3D).emitting and light.light_energy > 0.8)
+	var fuel0 := fire.fuel
+	await _frames(8)
+	_check("Fogueira mostra 'Adicionar lenha' e 'Apagar'", interact_btn.label == "Adicionar lenha")
+	await _tap_action("interact")
+	_check("Adicionar lenha aumenta o fogo (%.0f → %.0f s)" % [fuel0, fire.fuel], fire.fuel > fuel0 + 60.0)
+	stats.health = 100.0
+	_teleport(fire.global_position + Vector3.UP * 0.1, 0.0)
+	await get_tree().create_timer(1.6).timeout
+	_check("Encostar no fogo queima (vida %.0f)" % stats.health, stats.health < 99.0)
+	_teleport(Vector3(4.0, 0.05, 26.5), 0.0)
+	stats.health = 100.0
+	fire.extinguish()
+	await get_tree().create_timer(2.0).timeout
+	_check("Apagar a fogueira", not fire.is_burning() and not (fire.get("_flames") as GPUParticles3D).emitting)
+	fire.queue_free()
+	# --- mirar com a pistola
+	weapons.set_wielded(ItemData.Slot.SIDEARM)
+	await _frames(4)
+	var aim_btn := _hud.get_node("%AimButton") as ActionButton
+	_check("Botão Mirar aparece com a pistola", aim_btn.visible)
+	var spread_hip := weapons.current_spread_degrees()
+	await _tap_action("aim")
+	await get_tree().create_timer(0.6).timeout
+	var cam := get_viewport().get_camera_3d()
+	var tree := (_player.get_node("Visual") as SurvivorAnimator).get("_tree") as AnimationTree
+	_check("Mirando: zoom sobre o ombro (FOV %.0f)" % cam.fov, weapons.aiming and cam.fov < 55.0)
+	_check("Pose de mira (arma na linha dos olhos)", tree.get("parameters/hold_kind/current_state") == "aim_pistol")
+	_check("Mira mais precisa (%.2f° → %.2f°)" % [spread_hip, weapons.current_spread_degrees()],
+		weapons.current_spread_degrees() < spread_hip * 0.5)
+	await _tap_action("aim")
+	await get_tree().create_timer(0.6).timeout
+	_check("Sai da mira", not weapons.aiming and cam.fov > 60.0)
+	weapons.set_wielded(-1)
+	await _frames(5)
 
 
 # ================================================================ ZUMBI

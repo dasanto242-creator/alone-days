@@ -28,6 +28,12 @@ var _vehicle: RigidBody3D
 var _look_idle := 0.0
 @export var vehicle_distance := 6.2
 @export var vehicle_height := 1.5
+## Mirando: câmera colada sobre o ombro direito, com zoom (FOV menor) e giro mais fino.
+@export var aim_distance := 1.25
+@export var aim_shoulder := 0.58
+@export var aim_fov := 46.0
+var aiming := false
+var _base_fov := 70.0
 
 @onready var _yaw: Node3D = $Yaw
 @onready var _pitch: Node3D = $Yaw/Pitch
@@ -41,6 +47,7 @@ func _ready() -> void:
 	_pitch_deg = start_pitch
 	_arm.spring_length = outdoor_distance
 	_arm.position.x = outdoor_shoulder
+	_base_fov = _camera.fov
 	_camera.make_current()
 
 
@@ -89,7 +96,7 @@ func is_indoor() -> bool:
 
 
 func _process(delta: float) -> void:
-	var look := TouchInput.consume_look() * GameSettings.look_sensitivity
+	var look := TouchInput.consume_look() * GameSettings.look_sensitivity * (0.5 if aiming else 1.0)
 	_yaw_deg = wrapf(_yaw_deg - look.x, -180.0, 180.0)
 	_pitch_deg = clampf(_pitch_deg - look.y, min_pitch, max_pitch)
 	if _vehicle and is_instance_valid(_vehicle):
@@ -117,5 +124,14 @@ func _process(delta: float) -> void:
 
 	var t := 1.0 - exp(-transition_sharpness * delta)
 	var indoor := is_indoor()
-	_arm.spring_length = lerpf(_arm.spring_length, indoor_distance if indoor else outdoor_distance, t)
-	_arm.position.x = lerpf(_arm.position.x, indoor_shoulder if indoor else outdoor_shoulder, t)
+	var dist := indoor_distance if indoor else outdoor_distance
+	var shoulder := indoor_shoulder if indoor else outdoor_shoulder
+	var fov := _base_fov
+	if aiming:
+		t = 1.0 - exp(-12.0 * delta)  # entrar/sair da mira é rápido
+		dist = aim_distance
+		shoulder = aim_shoulder
+		fov = aim_fov
+	_arm.spring_length = lerpf(_arm.spring_length, dist, t)
+	_arm.position.x = lerpf(_arm.position.x, shoulder, t)
+	_camera.fov = lerpf(_camera.fov, fov, t)

@@ -29,10 +29,38 @@ func _physics_process(delta: float) -> void:
 	for i in 4:
 		if Input.is_action_just_pressed("weapon_%d" % (i + 1)):
 			select_entry(i)
+	if Input.is_action_just_pressed("aim"):
+		set_aiming(not aiming)
+	# mira cai sozinha ao correr, entrar em ação de corpo inteiro ou trocar de arma
+	if aiming and (_player.is_sprinting or _player.is_busy() or _player.in_vehicle() or not can_aim()):
+		set_aiming(false)
 	if Input.is_action_just_pressed("reload"):
 		reload()
 	if Input.is_action_just_pressed("attack"):
 		attack()
+
+
+## Mirar: só com arma de fogo em mãos. Câmera sobre o ombro com zoom, arma na linha dos olhos,
+## tiro bem mais preciso e passos mais lentos.
+var aiming := false
+
+
+func can_aim() -> bool:
+	var d := wielded_data()
+	return d != null and d.weapon_kind == ItemData.WeaponKind.PISTOL
+
+
+func set_aiming(on: bool) -> void:
+	on = on and can_aim() and not _player.in_vehicle()
+	if on == aiming:
+		return
+	aiming = on
+	if on and _player.is_sprinting:
+		_player.call("_set_sprinting", false)
+	_player.animator().set_aim(on)
+	if _player.camera_rig():
+		_player.camera_rig().aiming = on
+	Events.aim_changed.emit(on)
 
 
 func wielded_stack() -> ItemStack:
@@ -100,6 +128,8 @@ func cycle_weapon() -> void:
 
 func set_wielded(slot: int) -> void:
 	wielded_slot = slot
+	if aiming and slot != ItemData.Slot.SIDEARM:
+		set_aiming(false)
 	_player.face_camera = slot != -1  # postura de combate: corpo acompanha a câmera
 	_player.animator().set_wielded(slot, _player.inventory)
 	_emit_state()
@@ -128,6 +158,8 @@ func reload() -> void:
 		Events.notify.emit("Sem munição na mochila")
 		return
 	_busy = RELOAD_TIME
+	if aiming:
+		set_aiming(false)  # baixa a arma para recarregar
 	_player.animator().play_action(&"reload_pistol")
 	Sfx.play_3d(&"reload", _player.global_position + Vector3.UP * 1.2)
 	await get_tree().create_timer(RELOAD_TIME * 0.7).timeout
@@ -196,7 +228,7 @@ func _shoot(d: ItemData) -> void:
 	s.loaded -= 1
 	_cooldown = d.attack_cooldown
 	_player.snap_to_camera()
-	_player.animator().play_action(&"fire_pistol")
+	_player.animator().play_action(&"fire_pistol_aim" if aiming else &"fire_pistol")
 	_player.animator().muzzle_flash()
 	Sfx.play_3d(&"gunshot", _player.global_position + Vector3.UP * 1.4)
 	Events.noise_emitted.emit(_player.global_position, 45.0, _player)  # tiro: ouvido de longe
@@ -247,6 +279,8 @@ func _on_inventory_changed() -> void:
 func current_spread_degrees() -> float:
 	var speed := Vector2(_player.velocity.x, _player.velocity.z).length()
 	var deg := 0.35 + minf(speed, 5.0) * 1.1
+	if aiming:
+		deg *= 0.3
 	if not _player.is_on_floor():
 		deg += 4.0
 	if _player.is_crouching:

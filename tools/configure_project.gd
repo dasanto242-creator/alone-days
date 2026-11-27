@@ -61,6 +61,7 @@ func _init() -> void:
 	_action("crouch", [KEY_C])
 	_action("interact", [KEY_E])
 	_action("interact_alt", [KEY_G])
+	_action("aim", [KEY_Z])
 	_action("car_gas", [KEY_UP])
 	_action("car_brake", [KEY_DOWN])
 	_action("weapon_1", [KEY_1])

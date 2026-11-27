@@ -314,6 +314,79 @@ func _leave_vehicle() -> void:
 	Events.interaction_target_changed.emit("", "")
 
 
+# ---------------------------------------------------------------- porta-malas e fogueira
+
+## Vai até a traseira do carro e abre (ou fecha) a tampa com as duas mãos.
+func use_trunk(v: Vehicle, open: bool) -> void:
+	if _busy > 0.0 or stats.is_dead or vehicle != null:
+		return
+	_lower_weapon()
+	_set_sprinting(false)
+	# fica de frente para a traseira do carro
+	var to := v.global_position - global_position
+	to.y = 0.0
+	if to.length_squared() > 0.01:
+		_visual.rotation.y = atan2(-to.x, -to.z)
+	var length := _animator.play_use(&"trunk_open" if open else &"trunk_close")
+	_busy = maxf(length - 0.15, 0.6)
+	v.set_trunk_open(open)
+	if open:
+		# assim que a tampa sobe, já mostra o que tem dentro
+		get_tree().create_timer(length).timeout.connect(func() -> void:
+			if is_instance_valid(v) and v.trunk_open and global_position.distance_to(v.global_position) < 4.0:
+				open_container(v.trunk, "Porta-malas"))
+
+
+func open_container(inv: Inventory, title: String) -> void:
+	if stats.is_dead:
+		return
+	Events.container_requested.emit(inv, title)
+
+
+## Monta uma fogueira à frente com 3 lenhas: ajoelha, arruma as pedras e as toras e acende.
+func build_campfire() -> bool:
+	if _busy > 0.0 or stats.is_dead or vehicle != null:
+		return false
+	if inventory.count_of(&"firewood") < 3:
+		Events.notify.emit("Precisa de 3 lenhas para a fogueira")
+		return false
+	var fwd := facing()
+	var spot := global_position + fwd * 1.1
+	var space := get_world_3d().direct_space_state
+	var down := PhysicsRayQueryParameters3D.create(spot + Vector3.UP * 0.8, spot + Vector3.DOWN * 1.0, 1)
+	down.exclude = [get_rid()]
+	var hit := space.intersect_ray(down)
+	if hit.is_empty() or (hit.normal as Vector3).y < 0.85 or absf(hit.position.y - global_position.y) > 0.4:
+		Events.notify.emit("Precisa de um chão plano à frente")
+		return false
+	spot = hit.position
+	var shape := SphereShape3D.new()
+	shape.radius = 0.5
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.transform = Transform3D(Basis(), spot + Vector3.UP * 0.6)
+	q.collision_mask = 1 | 32
+	if not space.intersect_shape(q, 1).is_empty():
+		Events.notify.emit("Sem espaço para a fogueira aqui")
+		return false
+	for c in get_tree().get_nodes_in_group("campfires"):
+		if (c as Node3D).global_position.distance_to(spot) < 1.5:
+			Events.notify.emit("Já tem uma fogueira aqui")
+			return false
+	_lower_weapon()
+	_set_sprinting(false)
+	var length := _animator.play_use(&"build_fire")
+	_busy = length
+	inventory.consume(&"firewood", 3)
+	get_tree().create_timer(length * 0.85).timeout.connect(func() -> void:
+		var fire := Campfire.new()
+		get_parent().add_child(fire)
+		fire.global_position = spot
+		fire.rotation.y = randf() * TAU
+		Events.notify.emit("Fogueira acesa"))
+	return true
+
+
 ## Começa um salto/escalada (chamado pelo Parkour).
 func begin_parkour(anim: StringName, fwd: Vector3, length: float) -> void:
 	_lower_weapon()
@@ -608,6 +681,10 @@ func _target_speed(strength: float) -> float:
 		return crouch_speed * clampf(strength / jog_threshold, 0.4, 1.0)
 	if is_sprinting:
 		return sprint_speed
+	var weapons_node := get_node_or_null("Weapons") as WeaponHandler
+	if weapons_node and weapons_node.aiming:
+		# mirando de verdade (arma na linha dos olhos): só passos lentos e firmes
+		return walk_speed * 0.6
 	if _aiming():
 		# mirando: passos mais curtos e cuidadosos; o "trote" fica contido
 		return walk_speed * 0.8 if strength < jog_threshold else jog_speed * 0.72

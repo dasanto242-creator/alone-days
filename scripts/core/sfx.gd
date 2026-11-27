@@ -12,7 +12,7 @@ const NAMES := ["step_grass_0", "step_grass_1", "step_grass_2", "step_grass_3",
 	"gunshot", "gun_empty", "reload", "swing", "hit_flesh", "wood_knock", "axe_chop", "tree_crack",
 	"tree_fall", "zombie_groan_0", "zombie_groan_1", "zombie_groan_2", "zombie_attack", "zombie_hurt",
 	"zombie_death", "player_hurt", "player_effort", "land", "climb_scrape", "eat", "drink", "pickup",
-	"bag", "door", "ui_click", "engine_loop", "tire_skid", "car_door", "car_crash"]
+	"bag", "door", "ui_click", "engine_loop", "tire_skid", "car_door", "car_crash", "fire_loop", "fire_ignite", "fire_log"]
 ## Distância máxima em que cada som ainda é ouvido (m). Padrão: 30.
 const RANGE := {&"gunshot": 140.0, &"tree_fall": 70.0, &"tree_crack": 50.0, &"zombie_groan": 28.0,
 	&"step_grass": 14.0, &"step_hard": 16.0, &"axe_chop": 40.0, &"car_crash": 60.0}

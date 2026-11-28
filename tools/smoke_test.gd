@@ -375,6 +375,7 @@ func _run_stage2() -> void:
 	await _run_parkour_axe()
 	await _run_vehicle()
 	await _run_trunk_fire_aim()
+	await _run_world_and_dragon()
 	await _run_zombie()
 
 	# --- Morte
@@ -635,6 +636,103 @@ func _run_vehicle() -> void:
 
 
 # ================================================================ PORTA-MALAS, FOGUEIRA, MIRA
+
+func _run_world_and_dragon() -> void:
+	print("\n-- Terreno e dragão --")
+	var world := _player.get_parent()
+	var space := _player.get_world_3d().direct_space_state
+	# terreno: colisão (mapa de altura) bate com a altura gerada
+	var wg = load("res://tools/world_gen.gd").new()
+	var worst := 0.0
+	for p in [Vector2(0, 300), Vector2(-250, 120), Vector2(200, -340), Vector2(400, 400), Vector2(10, 10)]:
+		var q := PhysicsRayQueryParameters3D.create(Vector3(p.x, 400, p.y), Vector3(p.x, -50, p.y), 1)
+		var hit := space.intersect_ray(q)
+		var expect: float = wg.height(p.x, p.y)
+		worst = maxf(worst, absf((hit.position.y if hit else -999.0) - expect))
+	_check("Terreno: colisão acompanha colinas e montanhas (erro máx. %.2f m)" % worst, worst < 3.0)
+	_check("Floresta, pedras e grama no cenário", world.find_child("Forest", true, false) != null
+		and world.find_child("Grass", true, false) != null)
+	var d := world.get_node("Dragon") as Dragon
+	_check("Dragão deitado esperando", d.is_lying() and d.current_anim() == &"lie")
+	_teleport(d.mount_position() + d.global_transform.basis * Vector3(-0.6, 0, 0.2), 0.0)
+	await _frames(8)
+	var interact_btn := _hud.get_node("%InteractButton") as ActionButton
+	_check("Perto do ombro: 'Montar' (%s)" % interact_btn.label, interact_btn.label == "Montar")
+	await _tap_action("interact")
+	await get_tree().create_timer(1.0).timeout
+	var seat := d.seat_transform()
+	_check("Subindo no dragão (%s)" % _player.get("_dragon_stage"), _player.riding_dragon())
+	await get_tree().create_timer(2.4).timeout
+	_check("Montado na sela e o dragão se levanta", _player.get("_dragon_stage") == "ride"
+		and _player.global_position.distance_to(d.seat_transform().origin) < 0.05 and d.state == Dragon.State.STANDING)
+	_check("Sela acompanha o dragão em pé (%.2f m mais alta)" % (d.seat_transform().origin.y - seat.origin.y),
+		d.seat_transform().origin.y > seat.origin.y + 0.6)
+	var flap_btn := _hud.get_node("%DragonFlapButton") as ActionButton
+	_check("Botões do dragão: Voar e Rugir", flap_btn.visible and flap_btn.label == "Voar"
+		and (_hud.get_node("%DragonRoarButton") as ActionButton).visible)
+	var p0 := d.global_position
+	Input.action_press("move_forward", 1.0)
+	await get_tree().create_timer(1.5).timeout
+	Input.action_release("move_forward")
+	_check("Anda em quatro apoios (%.1f m)" % d.global_position.distance_to(p0), d.global_position.distance_to(p0) > 2.0)
+	await get_tree().create_timer(0.6).timeout
+	await _tap_action("dragon_flap")
+	await get_tree().create_timer(0.3).timeout
+	_check("Decola (agacha, abre as asas)", d.state == Dragon.State.TAKEOFF and d.current_anim() == &"takeoff")
+	Input.action_press("dragon_flap")
+	await get_tree().create_timer(3.0).timeout
+	_check("Voando e batendo asas (alt %.1f m, %.0f km/h)" % [d.altitude(), d.speed_kmh()],
+		d.state == Dragon.State.FLYING and d.altitude() > 6.0 and d.current_anim() == &"flap")
+	_check("Botão vira 'Bater asas' e aparece 'Pousar'", flap_btn.label == "Bater asas"
+		and (_hud.get_node("%DragonLandButton") as ActionButton).visible)
+	var alt0 := d.altitude()
+	Input.action_press("move_forward", 0.7)
+	await get_tree().create_timer(2.0).timeout
+	Input.action_release("move_forward")
+	Input.action_release("dragon_flap")
+	_check("Sobe com o joystick para cima (%.1f → %.1f m)" % [alt0, d.altitude()], d.altitude() > alt0 + 4.0)
+	await get_tree().create_timer(2.0).timeout
+	_check("Sem bater as asas: plana (%s)" % d.current_anim(), d.current_anim() == &"glide")
+	var yaw0 := d.rotation.y
+	Input.action_press("move_right", 1.0)
+	await get_tree().create_timer(2.0).timeout
+	_check("Curva para a direita inclinando o corpo (roll %.0f°, giro %.0f°)" % [d.roll_deg, rad_to_deg(yaw0 - d.rotation.y)],
+		d.roll_deg > 25.0 and yaw0 - d.rotation.y > 0.3)
+	Input.action_release("move_right")
+	var v0 := d.speed_kmh()
+	Input.action_press("move_back", 0.9)
+	await get_tree().create_timer(1.8).timeout
+	_check("Mergulho ganha velocidade (%.0f → %.0f km/h, %s)" % [v0, d.speed_kmh(), d.current_anim()],
+		d.speed_kmh() > v0 + 8.0 and d.pitch_deg < -15.0)
+	Input.action_release("move_back")
+	await get_tree().create_timer(0.5).timeout
+	await _tap_action("dragon_land")
+	await get_tree().create_timer(0.4).timeout
+	_check("Pousar: paira freando com as asas", d.state in [Dragon.State.LANDING, Dragon.State.TOUCHDOWN])
+	var t := 0.0
+	while d.state != Dragon.State.STANDING and t < 20.0:
+		await get_tree().create_timer(0.25).timeout
+		t += 0.25
+	_check("Pousa e fica em pé (%.1f s)" % t, d.state == Dragon.State.STANDING and d.altitude() < 0.3)
+	var dpos := d.global_position
+	await _tap_action("interact")
+	var tt := 0.0
+	while _player.riding_dragon() and tt < 6.0:
+		await get_tree().create_timer(0.1).timeout
+		tt += 0.1
+	print("   desceu em %.1f s: jogador %s lugar %s dragão andou %.2f" % [tt, _player.global_position, d.mount_position(), d.global_position.distance_to(dpos)])
+	await get_tree().create_timer(0.5).timeout
+	print("   desmontar: etapa '%s' dragão %d dist %.2f camada %d" % [_player.get("_dragon_stage"), d.state,
+		_player.global_position.distance_to(d.mount_position()), _player.collision_layer])
+	_check("Desmonta: o dragão deita e o jogador desce", not _player.riding_dragon() and d.is_lying()
+		and Vector2(_player.global_position.x - d.mount_position().x, _player.global_position.z - d.mount_position().z).length() < 0.6
+		and _player.collision_layer == 2)
+	_check("Controles a pé voltam", (_hud.get_node("%JumpButton") as ActionButton).visible and not flap_btn.visible)
+	# deixa o dragão de volta no lugar (para o teste do zumbi não esbarrar nele)
+	d.global_position = Vector3(30, 0.05, 4)
+	_teleport(Vector3(0, 0.05, 6), 0.0)
+	await _frames(10)
+
 
 func _run_trunk_fire_aim() -> void:
 	print("\n-- Porta-malas, lenha, fogueira e mira --")
@@ -922,7 +1020,10 @@ func _run_weapons() -> void:
 	var jacket_on := inv.equipped(ItemData.Slot.BODY) != null
 	_check("Camiseta só é desenhada sem jaqueta (jaqueta: %s, camiseta: %s)" % [jacket_on, shirt.visible],
 		shirt.visible != jacket_on)
-	_check("Árvores em MultiMesh (2 desenhos)", world.get_node("Trees").find_children("*", "MultiMeshInstance3D", false, false).size() == 2)
+	var forest := world.find_child("Forest", true, false)
+	_check("Floresta em MultiMesh com distância de desenho (perto 3D, longe cartões)",
+		forest != null and forest.find_children("Far", "MultiMeshInstance3D", true, false).size() > 20
+		and forest.find_children("Pines*", "MultiMeshInstance3D", true, false).size() > 20)
 
 	# --- Guardar
 	await _tap_action("weapon")

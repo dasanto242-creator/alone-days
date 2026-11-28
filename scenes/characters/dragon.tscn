@@ -1,0 +1,41 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/dragon/dragon.gd" id="1_6wb7u"]
+[ext_resource type="PackedScene" path="res://assets/models/dragon/dragon.glb" id="2_1c4oi"]
+[ext_resource type="Script" path="res://scripts/dragon/dragon_mount.gd" id="3_3txso"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_4yoo6"]
+radius = 0.55
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_b6gke"]
+radius = 0.85
+height = 5.6
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_n5a5h"]
+radius = 1.3
+
+[node name="Dragon" type="CharacterBody3D" unique_id=2098917045]
+collision_layer = 32
+collision_mask = 49
+script = ExtResource("1_6wb7u")
+
+[node name="FootShape" type="CollisionShape3D" parent="." unique_id=541679515]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, -0.3)
+shape = SubResource("SphereShape3D_4yoo6")
+
+[node name="BodyShape" type="CollisionShape3D" parent="." unique_id=530933275]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 2.15, -0.4)
+shape = SubResource("CapsuleShape3D_b6gke")
+
+[node name="Pivot" type="Node3D" parent="." unique_id=1293878107]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, -0.5)
+
+[node name="Model" parent="Pivot" unique_id=1714129785 instance=ExtResource("2_1c4oi")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -2.1, 0.5)
+
+[node name="MountArea" type="Area3D" parent="." unique_id=1915528496]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.75, 1, -2.2)
+script = ExtResource("3_3txso")
+
+[node name="Shape" type="CollisionShape3D" parent="MountArea" unique_id=1420616325]
+shape = SubResource("SphereShape3D_n5a5h")

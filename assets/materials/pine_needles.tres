@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://shaders/foliage.gdshader" id="1_0wer2"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/pine_needles.png" id="2_wjpnk"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_0wer2")
+shader_parameter/albedo_tex = ExtResource("2_wjpnk")
+shader_parameter/tint = Color(0.95, 1, 0.92, 1)
+shader_parameter/alpha_cut = 0.38
+shader_parameter/wind_strength = 0.35
+shader_parameter/wind_speed = 0.9
+shader_parameter/mode = 1.0
+shader_parameter/tree_height = 11.0
+shader_parameter/translucency = 0.4
+shader_parameter/base_shade = 0.55

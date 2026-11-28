@@ -23,6 +23,7 @@ var _tween: Tween
 var _hint_cooldown := 0.0
 
 static var _trunk_mesh: CylinderMesh
+static var _pine_mesh: Mesh
 static var _crown_low: CylinderMesh
 static var _crown_high: CylinderMesh
 static var _stump_mesh: CylinderMesh
@@ -63,6 +64,10 @@ static func _ensure_resources() -> void:
 	_crown_high.height = 2.6
 	_crown_high.radial_segments = 9
 	_crown_high.material = leaves2
+	if ResourceLoader.exists("res://assets/models/nature/pine_a_mesh.res"):
+		_pine_mesh = load("res://assets/models/nature/pine_a_mesh.res")
+		if ResourceLoader.exists("res://assets/materials/bark.tres"):
+			bark = load("res://assets/materials/bark.tres")
 	_stump_mesh = CylinderMesh.new()
 	_stump_mesh.top_radius = 0.19
 	_stump_mesh.bottom_radius = 0.23
@@ -86,15 +91,23 @@ func _ready() -> void:
 	_pivot.name = "Pivot"
 	_pivot.position.y = 0.35
 	add_child(_pivot)
-	var trunk := MeshInstance3D.new()
-	trunk.mesh = _trunk_mesh
-	trunk.position.y = 2.1
-	_pivot.add_child(trunk)
-	for c in [[_crown_low, 3.2], [_crown_high, 4.9]]:
-		var crown := MeshInstance3D.new()
-		crown.mesh = c[0]
-		crown.position.y = c[1]
-		_pivot.add_child(crown)
+	if _pine_mesh:
+		# pinheiro de verdade (o mesmo da floresta), menor; a base fica no corte
+		var pine := MeshInstance3D.new()
+		pine.mesh = _pine_mesh
+		pine.scale = Vector3.ONE * 0.58
+		pine.position.y = -0.35
+		_pivot.add_child(pine)
+	else:
+		var trunk := MeshInstance3D.new()
+		trunk.mesh = _trunk_mesh
+		trunk.position.y = 2.1
+		_pivot.add_child(trunk)
+		for c in [[_crown_low, 3.2], [_crown_high, 4.9]]:
+			var crown := MeshInstance3D.new()
+			crown.mesh = c[0]
+			crown.position.y = c[1]
+			_pivot.add_child(crown)
 	_stump = MeshInstance3D.new()
 	_stump.mesh = _stump_mesh
 	_stump.position.y = 0.175

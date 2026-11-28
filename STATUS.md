@@ -32,7 +32,7 @@
 | 2.7 | Tela de inventário por toque com ações contextuais (Comer, Beber, Usar, Equipar, Largar) | ✅ Concluído (testado) |
 | 2.8 | HUD discreta (vida, fome, sede, stamina), avisos na tela, tela de morte | ✅ Concluído |
 
-**Testes automáticos:** `tools/smoke_test.tscn` — 180 verificações, 180 aprovadas (rodam também no GitHub a cada build).
+**Testes automáticos:** `tools/smoke_test.tscn` — 200 verificações, 200 aprovadas (rodam também no GitHub a cada build).
 
 ## Com problemas / limitações conhecidas
 - Rosto ainda sem textura fotográfica (pele procedural); cabelo raspado pintado sob o gorro.
@@ -157,6 +157,38 @@
   mexe as sombras, distorção de calor no ar (gráfico Médio/Alto), som de fogo crepitando.
   Perto (3 m) recupera stamina e mostra "Calor da fogueira"; encostar no fogo queima
   (jogador e zumbis). Lenha dura ~2,5 min cada (máx. 10 min): **Adicionar lenha** / **Apagar**.
+
+## Ajustes de 27/11 — gráficos realistas e dragão de montaria
+- Cenário novo (tudo gerado por código, sem fotos nem modelos de terceiros):
+  - terreno de 1 km x 1 km: a área de antes continua plana no meio; em volta, colinas e
+    montanhas com rocha nas encostas e neve nos picos (colisão por mapa de altura);
+  - floresta com ~800 pinheiros 3D (tronco com casca, galhos de agulhas que balançam no vento);
+    de longe viram 2 cartões com a imagem do pinheiro (leve para o celular); ~400 pedras;
+  - grama alta que balança (22 mil tufos, só desenhada perto do jogador);
+  - texturas com relevo: grama, terra, rocha, neve, asfalto (com rachaduras e faixa
+    amarela), concreto, reboco (descascado mostrando tijolo), madeira, telhas, casca;
+  - céu com nuvens, sol com halo, névoa que azula as montanhas ao longe, curva de cor de
+    cinema (AgX), sombras mais suaves;
+  - casa com telhado de duas águas (telhas), empenas, janelas com moldura e vidro, batente,
+    rodapé; o carro abandonado agora usa o modelo 3D do carro.
+  - Qualidade gráfica: Baixo = sem grama e pinheiros 3D só até 40 m; Médio = metade da grama
+    até 40 m, pinheiros 3D até 65 m; Alto = tudo, até 60 m / 100 m.
+- Dragão (serpe de ~14 m, 16,6 m de envergadura; as asas são os braços, como morcegos):
+  - modelo próprio no Blender: escamas no dorso, placas na barriga, membrana das asas com
+    veias, chifres, espinhos, dentes, olhos âmbar, sela de couro com pito e cinta;
+  - animações: deitado respirando, levantar/deitar, parado, andar em quatro apoios (pulsos
+    das asas no chão), rugir (abre a boca), decolar (agacha, salta e bate forte), bater asas
+    (descida rápida com tudo aberto, subida dobrando cotovelo e pulso), pairar, planar,
+    curvas (cabeça e cauda acompanham), mergulho (asas meio fechadas) e pousar (freia com as
+    asas, estica as patas, amortece e recolhe as asas);
+  - voo físico: ganha velocidade mergulhando e perde subindo, arrasto, batidas de asa dão
+    empuxo, abaixo da velocidade mínima perde sustentação, curva coordenada pela inclinação;
+  - montar: chegue perto do ombro esquerdo do dragão deitado e toque **Montar** — o
+    personagem pisa na asa dobrada, sobe, passa a perna e senta; o dragão se levanta.
+    No chão: joystick anda/vira, **Voar** decola, **Rugir**, **Desmontar** (ele deita e você
+    desce). No ar: joystick guia (cima sobe, baixo mergulha, lados fazem curva inclinando),
+    segure **Bater asas** para ganhar velocidade/altura, **Pousar** (paira e pousa);
+  - sons: batida de asa, vento que aumenta com a velocidade, rugido, passos pesados.
 
 ## Personagem 3D
 - Gerado no Blender por `tools/character/` (ver README lá). Base humana MakeHuman (CC0).

@@ -10,7 +10,7 @@ Jogo de sobrevivência em mundo aberto para Android, em terceira pessoa, feito n
 Controles no PC (o mouse imita o dedo):
 - **Arrastar no lado esquerdo** da tela: joystick · **arrastar no lado direito**: câmera
 - Clicar nos botões redondos: Pular, Agachar, Correr, Interagir
-- Teclado: **W A S D** mover · **Shift** correr rápido · **C** agachar · **Espaço** pular / pular obstáculo / escalar · **E** interagir (Pegar, Beber, Comer) · **G** Guardar · **Tab/I** inventário · **Q** alternar arma · **1–4** barra de armas · **F** atacar/atirar · **R** recarregar · **Z** mirar (pistola)
+- Teclado: **W A S D** mover · **Shift** correr rápido · **C** agachar · **Espaço** pular / pular obstáculo / escalar · **E** interagir (Pegar, Beber, Comer) · **G** Guardar · **Tab/I** inventário · **Q** alternar arma · **1–4** barra de armas · **F** atacar/atirar · **R** recarregar · **Z** mirar (pistola) · Dragão: **E** montar/desmontar, **Espaço** voar/bater asas, **C** pousar, **R** rugir, **WASD** guiar
 
 ## APK automático (GitHub)
 Cada envio para o GitHub roda os testes e gera o APK sozinho:
@@ -45,7 +45,8 @@ Camadas de física: 1 world · 2 player · 3 interactable · 4 trigger.
 ## Ferramentas (desenvolvimento)
 ```
 godot --headless --path . res://tools/smoke_test.tscn    # testes automáticos
-godot --headless --path . res://tools/build_scenes.tscn  # regera as cenas da Etapa 1 (sobrescreve edições manuais!)
+godot --path . res://tools/build_scenes.tscn  # regera as cenas (sobrescreve edições manuais!). Rodar COM tela/GPU
+                                             # (sem --headless): no modo headless o Godot não salva as posições da grama e das árvores
 ```
 
 Status e pendências: ver `STATUS.md`.

@@ -377,6 +377,41 @@ def fire():
     save("fire_log", thud, 0.7)
 
 
+def dragon():
+    """Dragão: batida de asa (golpe de ar grave + couro da membrana), vento do voo (loop),
+    rugido (voz enorme e grave com rosnado), passo pesado."""
+    d = 0.9
+    n = int(d * SR)
+    t = t_axis(d)
+    gust = lp(brown(d), 160) * env(n, 0.12, 0.55) * 1.6
+    whoosh = bp(noise(d), 180, 1400) * env(n, 0.18, 0.5) * 0.7
+    snap = bp(noise(d), 300, 2600) * env(n, 0.005, 0.07) * (t > 0.16) * 0.5
+    save("dragon_flap", gust + whoosh + snap, 0.85)
+    # vento contínuo (aumenta com a velocidade no jogo)
+    d = 6.0
+    n = int(d * SR)
+    t = t_axis(d)
+    swell = 0.65 + 0.35 * lp(rng.normal(0, 1, n), 0.6) * 6
+    wind = (bp(noise(d), 120, 900) * 0.8 + bp(noise(d), 900, 3500) * 0.18) * np.clip(swell, 0.2, 1.4)
+    xf = int(0.4 * SR)
+    wind[:xf] = wind[:xf] * np.linspace(0, 1, xf) + wind[-xf:] * np.linspace(1, 0, xf)
+    _save_raw("dragon_wind", wind[: n - xf], 0.6)
+    # rugido: começa rosnando, abre num urro longo e cai
+    d = 2.6
+    n = int(d * SR)
+    bend = lambda tt: 0.75 + 0.45 * np.sin(np.pi * np.clip(tt / d, 0, 1)) ** 0.7  # noqa: E731
+    v = voice(42, d, [(320, 1.0), (750, 0.7), (1900, 0.35), (2900, 0.15)], rough=1.1, breath=0.7, jitter=0.18, bend=bend)
+    growl = lp(noise(d), 500) * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * 31 * t_axis(d)))) * 0.6
+    sub = tone(28 * bend(t_axis(d)), d, "sine") * 0.5
+    x = (v + growl + sub) * env(n, 0.25, 2.2, 0.0, 2.2)
+    save("dragon_roar", x, 0.95)
+    # passo: baque grave e um pouco de terra
+    d = 0.6
+    n = int(d * SR)
+    thud = lp(brown(d), 120) * env(n, 0.004, 0.25) * 2.2 + bp(noise(d), 400, 2500) * env(n, 0.01, 0.15) * 0.25
+    save("dragon_step", thud, 0.8)
+
+
 def _save_raw(name, x, peak):
     """Salva sem fade (loops precisam emendar sem cortar o volume)."""
     x = norm(np.asarray(x, dtype=float), peak)
@@ -402,3 +437,4 @@ if __name__ == "__main__":
     world()
     car()
     fire()
+    dragon()

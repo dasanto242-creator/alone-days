@@ -31,13 +31,14 @@ const LOCO: Array[StringName] = [&"idle", &"walk", &"walk_aim", &"run", &"sprint
 const LOOPING: Array[StringName] = [&"idle", &"walk", &"run", &"sprint", &"crouch_idle", &"crouch_walk",
 	&"hold_melee", &"hold_pistol", &"hold_item", &"walk_back", &"walk_left", &"walk_right", &"run_back", &"run_left",
 	&"run_right", &"crouch_walk_back", &"crouch_walk_left", &"crouch_walk_right", &"walk_aim", &"walk_aim_back",
-	&"walk_aim_left", &"walk_aim_right", &"fall", &"aim_pistol", &"drive", &"drive_left", &"drive_right"]
+	&"walk_aim_left", &"walk_aim_right", &"fall", &"aim_pistol", &"drive", &"drive_left", &"drive_right",
+	&"ride", &"ride_left", &"ride_right"]
 const LANDS: Array[StringName] = [&"land", &"land_hard"]
 const AIR: Array[StringName] = [&"jump", &"jump_run", &"fall"]
 const HOLDS: Array[StringName] = [&"hold_melee", &"hold_pistol", &"hold_item", &"aim_pistol"]
 const ACTIONS: Array[StringName] = [&"attack_melee", &"fire_pistol", &"reload_pistol", &"fire_pistol_aim"]
 const USES: Array[StringName] = [&"drink", &"eat", &"pickup", &"vault", &"climb", &"mantle_low", &"climb_high",
-	&"car_enter", &"car_exit", &"trunk_open", &"trunk_close", &"build_fire"]
+	&"car_enter", &"car_exit", &"trunk_open", &"trunk_close", &"build_fire", &"mount_dragon", &"dismount_dragon"]
 const UPPER_BONES := ["spine02", "spine01", "neck", "head", "jaw", "clavicle", "shoulder", "upperarm",
 	"lowerarm", "wrist", "finger"]
 const ACTION_BONES := ["spine04", "spine03"]
@@ -308,6 +309,16 @@ func set_driving(on: bool) -> void:
 		_model.basis = _model_basis
 
 
+## Montado no dragão (true) ou no carro (false) quando sentado.
+func set_riding(on: bool) -> void:
+	_tree.set("parameters/seat_kind/transition_request", "ride" if on else "drive")
+	set_driving(on)
+
+
+func set_ride_lean(amount: float) -> void:
+	_tree.set("parameters/ride_space/blend_position", clampf(amount, -1.0, 1.0))
+
+
 func set_drive_steer(amount: float) -> void:
 	_tree.set("parameters/drive_space/blend_position", clampf(amount, -1.0, 1.0))
 
@@ -490,10 +501,27 @@ func _build_tree() -> void:
 			a.animation = pair[0]
 			drive.add_blend_point(a, pair[1])
 	bt.add_node("drive_space", drive)
+	# montado no dragão: sentado de pernas abertas, inclina o corpo para dentro das curvas
+	var ride := AnimationNodeBlendSpace1D.new()
+	ride.min_space = -1.0
+	ride.max_space = 1.0
+	for pair in [[&"ride_left", -1.0], [&"ride", 0.0], [&"ride_right", 1.0]]:
+		if _anim.has_animation(pair[0]):
+			var a := AnimationNodeAnimation.new()
+			a.animation = pair[0]
+			ride.add_blend_point(a, pair[1])
+	bt.add_node("ride_space", ride)
+	var seat_kind := AnimationNodeTransition.new()
+	seat_kind.xfade_time = 0.0
+	seat_kind.add_input("drive")
+	seat_kind.add_input("ride")
+	bt.add_node("seat_kind", seat_kind)
+	bt.connect_node("seat_kind", 0, "drive_space")
+	bt.connect_node("seat_kind", 1, "ride_space")
 	var seat := AnimationNodeBlend2.new()
 	bt.add_node("seat", seat)
 	bt.connect_node("seat", 0, "land")
-	bt.connect_node("seat", 1, "drive_space")
+	bt.connect_node("seat", 1, "seat_kind")
 	_transition(bt, "use_kind", USES, 0.0)
 	var use := AnimationNodeOneShot.new()
 	use.fadein_time = 0.2

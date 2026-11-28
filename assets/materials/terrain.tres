@@ -1,0 +1,26 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://shaders/terrain.gdshader" id="1_2njj2"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/dirt_albedo.png" id="2_lqqj3"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/dirt_normal.png" id="3_cmpb7"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/grass_albedo.png" id="4_3eh23"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/grass_normal.png" id="5_5lb2e"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/macro_noise.png" id="6_s7gn1"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/rock_albedo.png" id="7_wldir"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/rock_normal.png" id="8_l2h8e"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/snow_albedo.png" id="9_4jpfn"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_2njj2")
+shader_parameter/grass_albedo = ExtResource("4_3eh23")
+shader_parameter/grass_normal = ExtResource("5_5lb2e")
+shader_parameter/dirt_albedo = ExtResource("2_lqqj3")
+shader_parameter/dirt_normal = ExtResource("3_cmpb7")
+shader_parameter/rock_albedo = ExtResource("7_wldir")
+shader_parameter/rock_normal = ExtResource("8_l2h8e")
+shader_parameter/snow_albedo = ExtResource("9_4jpfn")
+shader_parameter/macro_noise = ExtResource("6_s7gn1")
+shader_parameter/grass_scale = 0.22
+shader_parameter/rock_scale = 0.07
+shader_parameter/snow_line = 118.0

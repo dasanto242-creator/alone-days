@@ -48,3 +48,6 @@ signal aim_changed(aiming: bool)
 
 ## Abrir a tela de troca de itens com um recipiente (ex.: porta-malas).
 signal container_requested(inventory: Inventory, title: String)
+
+## Montou (dragão) ou desmontou (null) do dragão.
+signal dragon_changed(dragon: Node)

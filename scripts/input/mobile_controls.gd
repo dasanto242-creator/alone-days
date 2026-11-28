@@ -34,7 +34,11 @@ var _target_label: Label
 @onready var _gas_button: ActionButton = %GasButton
 @onready var _brake_button: ActionButton = %BrakeButton
 @onready var _handbrake_button: ActionButton = %HandbrakeButton
+@onready var _flap_button: ActionButton = %DragonFlapButton
+@onready var _land_button: ActionButton = %DragonLandButton
+@onready var _roar_button: ActionButton = %DragonRoarButton
 var _driving := false
+var _dragon: Dragon = null
 var _weapon_kind := 0
 
 
@@ -64,8 +68,9 @@ func _ready() -> void:
 	Events.player_movement_state_changed.connect(_on_player_movement_state_changed)
 	Events.vehicle_changed.connect(_on_vehicle_changed)
 	Events.aim_changed.connect(func(on: bool) -> void: _aim_button.highlighted = on)
-	for b in [_gas_button, _brake_button, _handbrake_button]:
+	for b in [_gas_button, _brake_button, _handbrake_button, _flap_button, _land_button, _roar_button]:
 		b.visible = false
+	Events.dragon_changed.connect(_on_dragon_changed)
 	get_viewport().size_changed.connect(_apply_safe_area)
 	_apply_safe_area()
 
@@ -213,6 +218,32 @@ func _on_vehicle_changed(vehicle: Node) -> void:
 		_set_button_visible(_aim_button, false)
 	else:
 		_on_weapon_state_changed(_weapon_kind, "", false)
+
+
+## Montado no dragão: botões Voar/Bater asas, Pousar (só voando) e Rugir.
+func _on_dragon_changed(dragon: Node) -> void:
+	_dragon = dragon as Dragon
+	var riding := _dragon != null
+	for b in [_jump_button, _crouch_button, _sprint_button]:
+		_set_button_visible(b, not riding)
+	for b in [_flap_button, _roar_button]:
+		_set_button_visible(b, riding)
+	_set_button_visible(_land_button, false)
+	if riding:
+		_set_button_visible(_alt_button, false)
+		_set_button_visible(_attack_button, false)
+		_set_button_visible(_reload_button, false)
+		_set_button_visible(_aim_button, false)
+	else:
+		_on_weapon_state_changed(_weapon_kind, "", false)
+
+
+func _process(_delta: float) -> void:
+	if _dragon == null or not is_instance_valid(_dragon):
+		return
+	var flying := _dragon.is_flying()
+	_flap_button.label = "Bater asas" if flying else "Voar"
+	_set_button_visible(_land_button, _dragon.state == Dragon.State.FLYING)
 
 
 func _on_player_movement_state_changed(is_crouching: bool, is_sprinting: bool) -> void:

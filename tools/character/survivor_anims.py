@@ -1262,6 +1262,99 @@ def car_enter(rig):
     finish(rig, act, cyclic=False)
 
 
+# ---------------------------------------------------------------- montaria (dragão)
+# Origem da armadura = assento da sela (superfície). O dragão deitado deixa a sela ~1,95 m acima
+# do chão; o jogador sobe pelo lado esquerdo (pisa no antebraço da asa dobrada).
+RIDE_GROUND = -1.87
+RIDE_SPOT = (1.75, 0.1)       # x (+ = esquerda), y (+ = trás) do lugar de montar, em relação à sela
+
+
+def _ride_hips(rig):
+    return Vector((0.0, 0.02, 0.1 - rig.rest_head["root"].z))
+
+
+def ride_pose(rig, roll=0.0, lean=16.0, look=0.0):
+    rig.pelvis(_ride_hips(rig), roll=roll * 0.5, pitch=6)
+    rig.torso(lean=lean, roll=roll)
+    rig.head(pitch=-lean * 0.6 + 4, yaw=look)
+    # pernas abertas em volta do pescoço, joelhos para fora, pés soltos ao lado do corpo
+    for side, sx in (("L", 1.0), ("R", -1.0)):
+        rig.foot(side, Vector((sx * 0.5, -0.1, -0.68 + rig.ground_ankle * 0.3)), pitch=10, yaw=sx * 12, knee_out=0.75)
+    horn = Vector((0.0, -0.36, 0.3))
+    for side, sx in (("L", 1.0), ("R", -1.0)):
+        rig.hand(side, horn + Vector((sx * 0.05, 0.0, -0.02 * sx)), pole=rig.chest_vec(Vector((sx * 0.7, 0.1, -0.6))), fist=0.9)
+
+
+def ride(rig):
+    for name, roll in (("ride", 0.0), ("ride_left", -14.0), ("ride_right", 14.0)):
+        act = new_action(rig, name, 2)
+        for f in (0, 2):
+            rig.begin()
+            ride_pose(rig, roll=roll, lean=16 + abs(roll) * 0.2, look=-roll * 1.2)
+            rig.key(f)
+        finish(rig, act)
+
+
+def mount_dragon_pose(rig, f):
+    gx, gy = RIDE_SPOT
+    g = RIDE_GROUND
+    hips = _ride_hips(rig)
+    # quadro: pélvis (x, y, z), giro do corpo, inclinação
+    keys = [
+        (0, (gx, gy, g, -90, 4)),
+        (8, (gx - 0.05, gy, g - 0.12, -90, 18)),
+        (18, (gx - 0.25, gy, g + 0.7, -90, 30)),
+        (28, (gx - 0.75, gy - 0.05, g + 1.45, -80, 40)),
+        (38, (0.45, 0.02, hips.z + rig.rest_head["root"].z * 0 + 0.25, -40, 34)),
+        (46, (0.05, hips.y, hips.z + 0.05, -6, 20)),
+        (54, (0.0, hips.y, hips.z, 0, 16)),
+    ]
+    px, py, pz, yaw, lean = keyed(keys, f)
+    rig.begin()
+    rig.pelvis(Vector((px, py, pz)), yaw=yaw, pitch=6 * smooth((f - 40) / 10))
+    rig.torso(lean=lean, yaw=yaw * 0.25)
+    rig.head(pitch=-20 + 30 * smooth((f - 30) / 16))
+    ga = g + rig.ground_ankle
+    arm_step = (gx - 0.4, gy - 0.15, g + 0.62)       # antebraço da asa dobrada (degrau)
+    ride_ankle = -0.68 + rig.ground_ankle * 0.3
+    # virado para o dragão, o pé esquerdo fica à frente (-y) e o direito atrás (+y).
+    # Esquerdo: pisa no antebraço da asa dobrada (degrau) e termina do lado esquerdo do pescoço.
+    lf = keyed([(0, (gx, gy - 0.12, ga)), (8, (gx, gy - 0.12, ga)), (14, (arm_step[0], arm_step[1], arm_step[2] + rig.ground_ankle)),
+                (26, (arm_step[0], arm_step[1], arm_step[2] + rig.ground_ankle)), (36, (0.62, -0.05, -0.5)),
+                (46, (0.5, -0.1, ride_ankle)), (54, (0.5, -0.1, ride_ankle))], f)
+    # Direito: sai do chão, passa por cima da sela por trás e desce do lado direito
+    rf = keyed([(0, (gx, gy + 0.12, ga)), (18, (gx, gy + 0.12, ga)), (28, (gx - 0.55, gy + 0.35, g + 1.35)),
+                (36, (0.1, 0.5, 0.42)), (42, (-0.45, 0.05, -0.2)), (48, (-0.5, -0.1, ride_ankle)), (54, (-0.5, -0.1, ride_ankle))], f)
+    ko = 0.75 * smooth((f - 34) / 10)
+    rig.foot("L", Vector(lf), pitch=10 * smooth((f - 44) / 6), knee_out=ko)
+    rig.foot("R", Vector(rf), pitch=10 * smooth((f - 44) / 6), knee_out=ko, knee_back=0.4 * math.sin(math.pi * min(max((f - 20) / 22, 0), 1)))
+    # mãos: alcança a borda da sela, puxa o corpo, depois segura o pito
+    edge = Vector((0.45, -0.05, 0.12))
+    horn = Vector((0.0, -0.36, 0.3))
+    rest_r = rig.shoulder_pos("R") + rig.chest_vec(Vector((-0.08, -0.05, -0.55)))
+    rest_l = rig.shoulder_pos("L") + rig.chest_vec(Vector((0.08, -0.05, -0.55)))
+    k_reach = smooth(f / 8)
+    k_horn = smooth((f - 40) / 10)
+    rh = rest_r.lerp(edge + Vector((0, -0.25, 0.05)), k_reach).lerp(horn + Vector((-0.05, 0, 0.02)), k_horn)
+    lh = rest_l.lerp(edge + Vector((0.05, 0.25, 0.0)), k_reach).lerp(horn + Vector((0.05, 0, -0.02)), k_horn)
+    rig.hand("R", rh, fist=0.85)
+    rig.hand("L", lh, fist=0.85)
+
+
+def mount_dragon(rig):
+    frames = 54
+    act = new_action(rig, "mount_dragon", frames)
+    for f in range(0, frames + 1, 2):
+        mount_dragon_pose(rig, f)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+    act = new_action(rig, "dismount_dragon", frames)
+    for f in range(0, frames + 1, 2):
+        mount_dragon_pose(rig, frames - f)
+        rig.key(f)
+    finish(rig, act, cyclic=False)
+
+
 def create_all(arm):
     bpy.context.scene.render.fps = FPS
     rig = Rig(arm)
@@ -1332,6 +1425,8 @@ def create_all(arm):
     drive_pose(rig, "drive", 0.0)
     drive_pose(rig, "drive_left", -90.0)
     drive_pose(rig, "drive_right", 90.0)
+    ride(rig)
+    mount_dragon(rig)
     for pb in rig.pb:
         pb.rotation_quaternion = Quaternion()
         pb.location = Vector()

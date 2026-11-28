@@ -26,6 +26,8 @@ var _indoor_count := 0
 ## Dirigindo: a câmera segue o carro de mais longe e volta sozinha para trás dele.
 var _vehicle: RigidBody3D
 var _look_idle := 0.0
+## Montado no dragão: câmera bem atrás e acima, afasta e abre o campo de visão com a velocidade.
+var _dragon: Dragon
 @export var vehicle_distance := 6.2
 @export var vehicle_height := 1.5
 ## Mirando: câmera colada sobre o ombro direito, com zoom (FOV menor) e giro mais fino.
@@ -68,6 +70,15 @@ func set_vehicle(vehicle: RigidBody3D) -> void:
 		_arm.add_excluded_object(vehicle.get_rid())
 
 
+func set_dragon(d: Dragon) -> void:
+	if _dragon and is_instance_valid(_dragon):
+		_arm.remove_excluded_object(_dragon.get_rid())
+	_dragon = d
+	if d:
+		_arm.add_excluded_object(d.get_rid())
+		_look_idle = 1.0
+
+
 ## Rotação horizontal da câmera, em radianos. O personagem anda relativo a ela.
 func get_yaw() -> float:
 	return deg_to_rad(_yaw_deg)
@@ -108,8 +119,28 @@ func _process(delta: float) -> void:
 			var rate := clampf(speed * 0.25, 0.6, 3.5)
 			_yaw_deg = rad_to_deg(lerp_angle(deg_to_rad(_yaw_deg), deg_to_rad(behind), 1.0 - exp(-rate * delta)))
 			_pitch_deg = lerpf(_pitch_deg, -10.0, 1.0 - exp(-rate * delta))
+	if _dragon and is_instance_valid(_dragon):
+		_look_idle = 0.0 if look.length_squared() > 0.0001 else _look_idle + delta
+		var flying := _dragon.is_flying()
+		var spd := _dragon.speed_kmh() / 3.6
+		if _look_idle > 0.6 and (flying or spd > 0.5):
+			var behind := rad_to_deg(_dragon.global_rotation.y)
+			var rate := 2.2 if flying else 1.2
+			_yaw_deg = rad_to_deg(lerp_angle(deg_to_rad(_yaw_deg), deg_to_rad(behind), 1.0 - exp(-rate * delta)))
+			var want := (-12.0 - _dragon.pitch_deg * 0.45) if flying else -14.0
+			_pitch_deg = lerpf(_pitch_deg, want, 1.0 - exp(-rate * delta))
 	_yaw.rotation.y = deg_to_rad(_yaw_deg)
 	_pitch.rotation.x = deg_to_rad(_pitch_deg)
+
+	if _dragon and is_instance_valid(_dragon):
+		var spd2 := _dragon.speed_kmh() / 3.6
+		var dgoal := _dragon.get_global_transform_interpolated() * Dragon.CENTER + Vector3.UP * 2.6
+		global_position = global_position.lerp(dgoal, 1.0 - exp(-10.0 * delta))
+		var td := 1.0 - exp(-3.0 * delta)
+		_arm.spring_length = lerpf(_arm.spring_length, 13.0 + clampf(spd2 * 0.18, 0.0, 6.0), td)
+		_arm.position.x = lerpf(_arm.position.x, 0.0, td)
+		_camera.fov = lerpf(_camera.fov, _base_fov + clampf((spd2 - 10.0) * 0.45, 0.0, 14.0), td)
+		return
 
 	if _vehicle and is_instance_valid(_vehicle):
 		var vgoal := _vehicle.get_global_transform_interpolated().origin + Vector3.UP * vehicle_height

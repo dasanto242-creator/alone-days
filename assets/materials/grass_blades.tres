@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://shaders/foliage.gdshader" id="1_88t81"]
+[ext_resource type="Texture2D" path="res://assets/textures/world/grass_blades.png" id="2_d38vw"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_88t81")
+shader_parameter/albedo_tex = ExtResource("2_d38vw")
+shader_parameter/tint = Color(0.92, 0.95, 0.85, 1)
+shader_parameter/alpha_cut = 0.35
+shader_parameter/wind_strength = 0.13
+shader_parameter/wind_speed = 1.6
+shader_parameter/mode = 0.0
+shader_parameter/tree_height = 10.0
+shader_parameter/translucency = 0.4
+shader_parameter/base_shade = 0.62

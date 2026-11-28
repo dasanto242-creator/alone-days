@@ -69,6 +69,11 @@ var _vehicle_stage := ""
 var _vehicle_time := 0.0
 var _approach_from := Vector3.ZERO
 const VEHICLE_MASK := 32
+## Dragão em que está montado e etapa: "approach", "mount", "ride", "lower", "dismount".
+var dragon: Dragon = null
+var _dragon_stage := ""
+var _dragon_time := 0.0
+const MOUNT_TIME := 54.0 / 30.0
 
 ## Item consumível na mão (pego do chão com "Pegar"): Consumir ou Guardar.
 var held: ItemStack = null
@@ -96,6 +101,9 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if vehicle != null:
 		_vehicle_process(delta)
+		return
+	if dragon != null:
+		_dragon_process(delta)
 		return
 	if parkour.is_active():
 		global_position = parkour.step(delta)
@@ -310,6 +318,131 @@ func _leave_vehicle() -> void:
 	collision_layer = 2
 	collision_mask = 1 | 16 | VEHICLE_MASK
 	v.set_driver(null)
+	_last_prompt = ""
+	Events.interaction_target_changed.emit("", "")
+
+
+# ---------------------------------------------------------------- dragão
+
+## Vai até o lado esquerdo do dragão deitado, sobe pela asa dobrada e senta na sela.
+func mount_dragon(d: Dragon) -> void:
+	if dragon != null or vehicle != null or d.is_occupied() or not d.is_lying() or _busy > 0.0 \
+			or stats.is_dead or parkour.is_active():
+		return
+	if held != null and not store_held():
+		return
+	_lower_weapon()
+	_rewield_slot = -1
+	_set_sprinting(false)
+	if is_crouching:
+		_set_crouching(false)
+	dragon = d
+	d.set_rider(self)
+	_dragon_stage = "approach"
+	_dragon_time = 0.0
+	_approach_from = global_position
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	_last_prompt = ""
+	Events.interaction_target_changed.emit("", "")
+	Events.interaction_alt_changed.emit("")
+
+
+func riding_dragon() -> bool:
+	return dragon != null
+
+
+func _dragon_process(delta: float) -> void:
+	_dragon_time += delta
+	match _dragon_stage:
+		"approach":
+			var spot := dragon.mount_position()
+			var t := clampf(_dragon_time / 0.45, 0.0, 1.0)
+			global_position = _approach_from.lerp(spot, t)
+			_visual.rotation.y = lerp_angle(_visual.rotation.y, dragon.global_rotation.y - PI * 0.5, 1.0 - exp(-14.0 * delta))
+			_animator.update_pose(1.0 if t < 1.0 else 0.0, sprint_speed, true, false, delta)
+			if t >= 1.0:
+				_dragon_stage = "mount"
+				_dragon_time = 0.0
+				_place_in_seat(dragon.seat_transform())
+				_animator.play_use(&"mount_dragon")
+		"mount":
+			_place_in_seat(dragon.seat_transform())
+			if _dragon_time >= MOUNT_TIME - 0.05:
+				_dragon_stage = "ride"
+				_animator.set_riding(true)
+				dragon.stand_up()
+				if _camera_rig:
+					_camera_rig.set_dragon(dragon)
+				Events.dragon_changed.emit(dragon)
+				Events.notify.emit("Voar: decola · segure para bater asas · joystick guia · Pousar · Rugir")
+		"ride":
+			_place_in_seat(dragon.seat_transform())
+			var mv := Input.get_vector("move_left", "move_right", "move_back", "move_forward", 0.05)
+			dragon.steer = mv
+			dragon.flap_held = Input.is_action_pressed("dragon_flap")
+			if Input.is_action_just_pressed("dragon_flap") and dragon.is_grounded_idle():
+				dragon.take_off()
+			if Input.is_action_just_pressed("dragon_land"):
+				dragon.request_land()
+			if Input.is_action_just_pressed("dragon_roar"):
+				dragon.roar()
+			_animator.set_ride_lean(dragon.roll_deg / 40.0)
+			if Input.is_action_just_pressed("interact") and dragon.is_grounded_idle():
+				dismount_dragon()
+			var prompt := "Desmontar" if dragon.is_grounded_idle() else ""
+			if prompt != _last_prompt:
+				_last_prompt = prompt
+				Events.interaction_target_changed.emit(prompt, "")
+		"lower":
+			# espera o dragão deitar para descer
+			_place_in_seat(dragon.seat_transform())
+			if dragon.is_lying():
+				_dragon_stage = "dismount"
+				_dragon_time = 0.0
+				_animator.set_riding(false)
+				_animator.play_use(&"dismount_dragon")
+		"dismount":
+			_place_in_seat(dragon.seat_transform())
+			if _dragon_time >= MOUNT_TIME - 0.05:
+				_leave_dragon()
+
+
+## Desmonta (só com o dragão parado no chão): ele deita e o jogador desce pela asa.
+func dismount_dragon() -> bool:
+	if dragon == null or _dragon_stage != "ride" or not dragon.is_grounded_idle():
+		return false
+	_dragon_stage = "lower"
+	_dragon_time = 0.0
+	dragon.steer = Vector2.ZERO
+	dragon.flap_held = false
+	dragon.lie_down()
+	_last_prompt = ""
+	Events.interaction_target_changed.emit("", "")
+	if _camera_rig:
+		_camera_rig.set_dragon(null)
+	Events.dragon_changed.emit(null)
+	return true
+
+
+func _leave_dragon() -> void:
+	var d := dragon
+	var spot := d.mount_position()
+	# em encosta: pisa no chão de verdade ao lado do dragão
+	var q := PhysicsRayQueryParameters3D.create(spot + Vector3.UP * 3.0, spot + Vector3.DOWN * 4.0, 1)
+	q.exclude = [d.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit:
+		spot.y = (hit.position as Vector3).y
+	dragon = null
+	_dragon_stage = ""
+	global_transform = Transform3D(Basis(), spot + Vector3.UP * 0.05)
+	_visual.rotation = Vector3(0, d.global_rotation.y - PI * 0.5, 0)
+	reset_physics_interpolation()
+	collision_layer = 2
+	collision_mask = 1 | 16 | VEHICLE_MASK
+	d.set_rider(null)
 	_last_prompt = ""
 	Events.interaction_target_changed.emit("", "")
 
